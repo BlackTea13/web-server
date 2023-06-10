@@ -22,6 +22,8 @@ void yyerror (const char *s);
 
 void set_parsing_options(char *buf, size_t siz, Request *parsing_request);
 
+void resize_headers(Request* request);
+
 /* yyparse() calls yylex() to get tokens */
 extern int yylex();
 
@@ -209,6 +211,7 @@ request_header: token ows t_colon ows text ows t_crlf {
     strcpy(parsing_request->headers[parsing_request->header_count].header_name, $1);
 	strcpy(parsing_request->headers[parsing_request->header_count].header_value, $5);
 	parsing_request->header_count++;
+	resize_headers(parsing_request);
 };
 
 
@@ -218,14 +221,29 @@ request_header: token ows t_colon ows text ows t_crlf {
  * 2616.  All the best!
  *
  */
-request: request_line request_header t_crlf{
+request_headers: request_header {
+	YPRINTF("request_Headers: Matched rule 1\n");
+}; |
+request_headers request_header {
+	YPRINTF("request_Headers: Matched rule 2\n");
+}; 
+
+
+
+request: request_line request_headers t_crlf{
 	YPRINTF("parsing_request: Matched Success.\n");
 	return SUCCESS;
 };
 
+
+
 %%
 
 /* C code */
+
+void resize_headers(Request* request){
+	request->headers = realloc(request->headers, sizeof(Request_header) * (request->header_count + 1));
+}
 
 void set_parsing_options(char *buf, size_t siz, Request *request)
 {
