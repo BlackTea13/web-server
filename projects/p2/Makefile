@@ -3,21 +3,21 @@ OBJ_DIR := obj
 # all src files
 SRC := $(wildcard $(SRC_DIR)/*.c)
 # all objects
-OBJ := $(OBJ_DIR)/y.tab.o $(OBJ_DIR)/lex.yy.o $(OBJ_DIR)/parse.o $(OBJ_DIR)/sample_parse.o
+OBJ := $(OBJ_DIR)/y.tab.o $(OBJ_DIR)/lex.yy.o $(OBJ_DIR)/parse.o $(OBJ_DIR)/icws.o
 # all binaries
 BIN := sample_parse
 # C compiler
-CC  := gcc
+CC  := g++
 # C PreProcessor Flag
-CPPFLAGS := 
+CPPFLAGS :=-std=c++23
 # compiler flags
 CFLAGS   := -g -Wall
 # DEPS = parse.h y.tab.h
 
 default: all
-all : sample_parse 
+all : icws
 
-sample_parse: $(OBJ)
+icws: $(OBJ)
 	$(CC) $^ -o $@
 
 $(SRC_DIR)/lex.yy.c: $(SRC_DIR)/lexer.l
@@ -29,6 +29,9 @@ $(SRC_DIR)/y.tab.c: $(SRC_DIR)/parser.y
 	mv y.tab.h $(SRC_DIR)/y.tab.h
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(OBJ_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(OBJ_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 #echo_server: $(OBJ_DIR)/echo_server.o

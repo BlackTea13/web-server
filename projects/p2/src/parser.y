@@ -229,7 +229,6 @@ request_headers request_header {
 }; 
 
 
-
 request: request_line request_headers t_crlf{
 	YPRINTF("parsing_request: Matched Success.\n");
 	return SUCCESS;
@@ -242,7 +241,7 @@ request: request_line request_headers t_crlf{
 /* C code */
 
 void resize_headers(Request* request){
-	request->headers = realloc(request->headers, sizeof(Request_header) * (request->header_count + 1));
+	request->headers = (Request_header*)realloc(request->headers, sizeof(Request_header) * (request->header_count + 1));
 }
 
 void set_parsing_options(char *buf, size_t siz, Request *request)
