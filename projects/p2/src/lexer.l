@@ -236,7 +236,7 @@ token_char      [\x0-\x7f]{-}[\x0-\x1f\x7f]{-}[\{\}\(\)\<\>@\,;:\\\"/\[\]?=\x20\
 {token_char} {
 	/* Rule 9: A character allowed in a token */
 
-	LPRINTF("t:token_char %s\n", yytext);
+	//LPRINTF("t:token_char %s\n", yytext);
 	/*
 	 * Again, it is important to communicate the value back
 	 * Otherwise, yacc has no way to know which character matched the rule
