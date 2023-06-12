@@ -3,9 +3,9 @@ OBJ_DIR := obj
 # all src files
 SRC := $(wildcard $(SRC_DIR)/*.c)
 # all objects
-OBJ := $(OBJ_DIR)/y.tab.o $(OBJ_DIR)/lex.yy.o $(OBJ_DIR)/parse.o $(OBJ_DIR)/icws.o
+OBJ := $(OBJ_DIR)/y.tab.o $(OBJ_DIR)/lex.yy.o $(OBJ_DIR)/parse.o $(OBJ_DIR)/pcsa_net.o $(OBJ_DIR)/icws.o 
 # all binaries
-BIN := sample_parse
+BIN := icws
 # C compiler
 CC  := g++
 # C PreProcessor Flag
@@ -31,7 +31,7 @@ $(SRC_DIR)/y.tab.c: $(SRC_DIR)/parser.y
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(OBJ_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(OBJ_DIR)
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(OBJ_DIR) 
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 #echo_server: $(OBJ_DIR)/echo_server.o
@@ -45,4 +45,5 @@ $(OBJ_DIR):
 
 clean:
 	$(RM) $(OBJ) $(BIN) $(SRC_DIR)/lex.yy.c $(SRC_DIR)/y.tab.*
-	$(RM) -r $(OBJ_DIR)
+	$(RM) -rf $(OBJ_DIR)
+
