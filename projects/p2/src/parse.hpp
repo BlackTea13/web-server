@@ -16,7 +16,7 @@ struct ParseResult {
 	std::string response_reason;
 };
 
-ParseResult parse(char *buffer, int size,int socketFd);
+ParseResult parse(char *buffer, int size);
 inline std::string get_reason(ResponseCode code);
 
 // functions decalred in parser.y

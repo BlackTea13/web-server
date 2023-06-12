@@ -22,7 +22,7 @@ inline std::string get_reason(ResponseCode code){
 /*
 * Given a char buffer returns the parsed request headers
 */
-ParseResult parse(char *buffer, int size, int socketFd) {
+ParseResult parse(char *buffer, int size) {
   //Differant states in the state machine
 	
 	enum {
