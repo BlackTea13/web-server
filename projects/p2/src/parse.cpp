@@ -1,5 +1,6 @@
 #include <string>
-#include "parse.hpp"
+#include <iostream>
+#include "parse.h"
 
 /**
  * Given a ResponseCode Enum, give a string of the reason
@@ -86,16 +87,19 @@ ParseResult parse(char *buffer, int size) {
     printf("Parsing Failed\n");
 	if (state != STATE_CRLFCRLF){
 		// Request does not have the correct syntax
+		std::cerr << "DEBUG: Request does not have the correct syntax" << "\n";
 		return ParseResult({false, NULL, 400, get_reason(ResponseCode::BAD_REQUEST)});
 	}
 
 	// We'll have to look at the request object now :(
 	if (strcmp(request->http_version, "HTTP/1.1") != 0){
 		// We only support HTTP/1.1
+		std::cerr << "DEBUG: We only support HTTP/1.1" << "\n";
 		return ParseResult({false, NULL, 505, get_reason(ResponseCode::HTTP_VERSION_NOT_SUPPORTED)});
 	}
 
 	if (strcmp(request->http_method, "GET") != 0){
+		std::cerr << "DEBUG: We only support GET" << "\n";
 		return ParseResult({false, NULL, 501, get_reason(ResponseCode::NOT_IMPLEMENTED)});
 	}
 	if (strcmp(request->http_method, "HEAD") != 0){

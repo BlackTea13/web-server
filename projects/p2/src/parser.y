@@ -5,7 +5,7 @@
  */
 
 %{
-#include "parse.hpp"
+#include "parse.h"
 
 /* Define YACCDEBUG to enable debug messages for this lex file */
 //#define YACCDEBUG

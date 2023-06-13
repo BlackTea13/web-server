@@ -5,7 +5,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netdb.h>
-#include "parse.hpp"
+#include "parse.h"
 #include "pcsa_net.hpp"
 #include "globals.hpp"
 
@@ -46,6 +46,12 @@ int process_args(int argc, char* argv[]){
 
 
 int process_request(char* buf, int socketFd){
+    ParseResult result = parse(buf, strlen(buf));
+    
+    if(!result.success){
+
+        return EXIT_SUCCESS;
+    }
 
     return EXIT_SUCCESS;
 } 
@@ -72,7 +78,11 @@ int start_server(){
             continue;
         }
         char buf[BUFSIZE];
-        ssize_t len = read_line(connFd, buf, BUFSIZE);
+        ssize_t len;
+        while ((len = read(connFd, buf, BUFSIZE) > 0)) {
+            if (strstr(buf, "\r\n\r\n") != NULL) break;
+        }
+
         std::cout << "len: " << len << '\n';
         std::cout << "buf: " << buf << '\n';
         write_all(connFd, buf, len);

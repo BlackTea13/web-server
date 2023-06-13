@@ -1,6 +1,7 @@
 #pragma once//Header field
 #include <vector>
 #include <string>
+#include <unordered_set>
 #include "globals.hpp"
 
 //Enum ResponseCodes
@@ -11,6 +12,15 @@ enum class ResponseCode {
 	REQUEST_TIMEOUT = 408,	
 	NOT_IMPLEMENTED = 501,
 	HTTP_VERSION_NOT_SUPPORTED = 505
+};
+
+const std::unordered_set<std::string> response_headers = {
+    "Date",
+    "Server",
+    "Connection",
+    "Content-Type",
+    "Content-Length",
+    "Last-Modified"  
 };
 
 //HTTP Request Header
@@ -40,10 +50,16 @@ struct Response_header {
 struct Response {
     int response_code;
     std::string response_reason;
-    std::string response_body;
     std::vector<Response_header> headers;
+    std::string response_body;
+
+    // Constructor
+    Response(int code, std::string reason, std::vector<Response_header> headers, std::string body) : 
+        response_code(code), response_reason(reason), headers(headers), response_body(body) {}
+
 };
 
 
 // HTTP Response functions
 std::string response_to_string(Response response);
+std::vector<std::string> request_headers_to_vec(Request request);

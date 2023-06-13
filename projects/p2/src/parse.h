@@ -1,11 +1,11 @@
 #pragma once
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string>
+#include <cstring>
 #include "httpobjects.hpp"
 
 #define SUCCESS 0
+
+
 
 
 //Result of parsing
