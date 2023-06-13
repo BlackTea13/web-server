@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 #include <unordered_set>
+#include <chrono>
 #include "globals.hpp"
 
 //Enum ResponseCodes
@@ -12,15 +13,6 @@ enum class ResponseCode {
 	REQUEST_TIMEOUT = 408,	
 	NOT_IMPLEMENTED = 501,
 	HTTP_VERSION_NOT_SUPPORTED = 505
-};
-
-const std::unordered_set<std::string> response_headers = {
-    "Date",
-    "Server",
-    "Connection",
-    "Content-Type",
-    "Content-Length",
-    "Last-Modified"  
 };
 
 //HTTP Request Header
@@ -40,7 +32,16 @@ typedef struct
 	int header_count;
 } Request;
 
-//HTTP Response Header
+/**
+ * HTTP Response Header
+ * In this project we only need to support a subset of the headers
+ * - Date
+ * - Server
+ * - Connection
+ * - Content-Type
+ * - Content-Length
+ * - Last-Modified
+*/
 struct Response_header {
     std::string header_name;
     std::string header_value;
@@ -63,3 +64,4 @@ struct Response {
 // HTTP Response functions
 std::string response_to_string(Response response);
 std::vector<std::string> request_headers_to_vec(Request request);
+std::string RFC1123_DateTimeNow();
