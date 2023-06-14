@@ -1,8 +1,4 @@
 #pragma once//Header field
-#include <vector>
-#include <string>
-#include <unordered_set>
-#include <chrono>
 #include "globals.hpp"
 
 //Enum ResponseCodes
@@ -45,6 +41,8 @@ typedef struct
 struct Response_header {
     std::string header_name;
     std::string header_value;
+
+    Response_header(std::string name, std::string value) : header_name(name), header_value(value) {}
 };
 
 //HTTP Response 
@@ -54,9 +52,13 @@ struct Response {
     std::vector<Response_header> headers;
     std::string response_body;
 
+    // Default Constructor
+    Response() : response_code(0), response_reason(""), headers(std::vector<Response_header>()), response_body("") {}
+
     // Constructor
     Response(int code, std::string reason, std::vector<Response_header> headers, std::string body) : 
         response_code(code), response_reason(reason), headers(headers), response_body(body) {}
+
 
 };
 
@@ -64,4 +66,8 @@ struct Response {
 // HTTP Response functions
 std::string response_to_string(Response response);
 std::vector<std::string> request_headers_to_vec(Request request);
+bool header_name_in_request(Request* request, std::string header_name);
+int get_response_size(Response response);
 std::string RFC1123_DateTimeNow();
+
+
