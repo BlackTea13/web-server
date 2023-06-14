@@ -7,10 +7,29 @@
 #include <sys/types.h>
 #include <netdb.h>
 #include <poll.h>
+#include <unordered_map>
 #include "parse.h"
 #include "pcsa_net.hpp"
+#include "swag_net.hpp"
 #include "globals.hpp"
 
+static const std::unordered_map<std::string, std::string> mime_types = {
+    {".html", "text/html"},
+    {".css", "text/css"},
+    {".js", "application/javascript"},
+    {".jpg", "image/jpeg"},
+    {".jpeg", "image/jpeg"},
+    {".png", "image/png"},
+    {".gif", "image/gif"},
+    {".txt", "text/plain"},
+    {".pdf", "application/pdf"},
+    {".mp4", "video/mp4"},
+    {".mp3", "audio/mpeg"},
+    {".ico", "image/x-icon"}
+};
+
+// a map for storing the buffer info for each connection
+std::unordered_map<int, BufferInfo> buffer_map;
 
 const option long_opts[] =
 {
@@ -81,7 +100,45 @@ Response create_error_response(ParseResult result){
 }
 
 
-Response process_request(char* buf, int socketFd){
+Response process_request(int socketFd){
+    std::cout << "PROCESSING REQUEST" << "\n";
+    BufferInfo buffer_info;
+
+
+    if(buffer_map.count(socketFd) < 0){ // TRUE if socketFd is not in buffer_map
+        buffer_info = BufferInfo();
+        buffer_map[socketFd] = buffer_info;
+    }
+    buffer_info = buffer_map[socketFd];
+
+    char buf[BUFSIZE];
+    int readBytes;
+    std::string line;
+    std::string request_string = "";
+    while ((readBytes = read_line_swag(socketFd, buf, BUFSIZE, buffer_info, 8000)) > 0) {
+        std::cout << "READ BYTES: " << readBytes << "\n";
+        std::cout << "BUFFER: " << buf << "\n";
+        line = std::string(buf);
+        request_string += line;
+        if(line == "\r\n"){
+            break;
+        }
+    }
+    // error
+    if(readBytes == -1){
+        std::cout << "DEBUG: ERROR" << '\n';
+        return Response();
+    }
+    // timeout
+    if(readBytes == -2){
+        std::cout << "DEBUG: REQUEST TIMEOUT" << '\n';
+        return Response();
+    }
+
+    std::cout << "REQUEST STRING: " << request_string << "\n";
+    write_all(socketFd, request_string.data(), request_string.size());
+
+    std::cout << "START PARSING" << "\n";
     ParseResult result = parse(buf, strlen(buf));
 
     if(!result.success){
@@ -122,24 +179,9 @@ int start_server(){
             std::cerr << "Error: accept failed" << '\n';
             continue;
         }
-        char buf[BUFSIZE];
-        ssize_t len;
 
-        // TODO: THIS IS BLOCKING, BAD REQUESTS NEVER FINISH
-        while ((len = read(connFd, buf, BUFSIZE) > 0)) {
-            if (strstr(buf, "\r\n\r\n") != NULL) break;
-        }
-
-        std::cout << "len: " << len << '\n';
-        std::cout << "buf: " << buf << '\n';
-        write_all(connFd, buf, len);
-
-        std::cout << "START PROCESS" << "\n";
-        Response response = process_request(buf, connFd);
-
-        std::cout << "DEBUG: finished processing" << "\n";
-        write_response_to_socket(response, connFd);
-        close(connFd);
+        // pass work
+        process_request(connFd);
     }
     close(listenFd);
     return EXIT_SUCCESS;

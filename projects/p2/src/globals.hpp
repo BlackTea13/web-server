@@ -15,6 +15,10 @@
 #define BUFSIZE_BODY 4096
 #define BUFSIZE_RESPONSE_REASON 50
 #define RFC1123_TIME_LEN 29
+#define TIMEOUT_DURATION 5000 // 5 seconds timeout
+
+#define READBUFCAPACITY 8192
+
 
 static const char* RFC1123_TIME_FMT = "%a, %d %b %Y %H:%M:%S GMT";
 static const char* SERVER_VALUE = "Rob's Cool P2 Server B)";
