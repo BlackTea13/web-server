@@ -1,5 +1,7 @@
 #pragma once//Header field
 #include "globals.hpp"
+#include <sstream>
+#include <unordered_map>
 
 //Enum ResponseCodes
 enum class ResponseCode {
@@ -62,6 +64,17 @@ struct Response {
 
 };
 
+// Default values for connection header for different respones
+static std::unordered_map<int, std::string> connection_header = {
+	{200, "keep-alive"},
+	{400, "keep-alive"},
+	{404, "close"},
+	{408, "keep-alive"},
+	{501, "keep-alive"},
+	{505, "keep-alive"}
+};
+
+
 
 // HTTP Response functions
 std::string response_to_string(Response response);
@@ -70,4 +83,11 @@ bool header_name_in_request(Request* request, std::string header_name);
 int get_response_size(Response response);
 std::string RFC1123_DateTimeNow();
 
+Response timeout_response();
+Response bad_request_response();
+Response unimplemented_response();
+Response get_response(Request request, std::string root_dir);
+Response head_response(Request request, std::string root_dir);
 
+Response create_error_response(int code, std::string reason, std::string connection);
+Response create_good_response(std::string connection, std::string body, std::string content_type);

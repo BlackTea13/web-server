@@ -1,5 +1,4 @@
 #include <iostream>
-#include <sstream>
 #include <unistd.h>
 #include <getopt.h>
 #include <string.h>
@@ -12,6 +11,7 @@
 #include "pcsa_net.hpp"
 #include "swag_net.hpp"
 #include "globals.hpp"
+
 
 static const std::unordered_map<std::string, std::string> mime_types = {
     {".html", "text/html"},
@@ -65,42 +65,24 @@ int process_args(int argc, char* argv[]){
     return EXIT_SUCCESS;
 }
 
-Response create_error_response(ParseResult result){
+Response error_response(ParseResult result){
         int response_code = result.response_code;
         std::string response_reason = result.response_reason;
         Request* request = result.request;
-        Response response = Response(response_code, response_reason, std::vector<Response_header>(), "");
         std::string date = RFC1123_DateTimeNow();
         std::string last_modified = date;
         
-        std::cout << "VARIABLES INITIALIZED...." << "\n";
-
         // we take the connection parameter from the response
         // if it does not exist, we assume to keep the connection alive
         bool keep_alive = true;
         if(header_name_in_request(request, "Connection")){
             keep_alive = strcmp(request->headers[0].header_value, "close") != 0;
         }
-        std::string content_type = "text/html";
-        std::ostringstream bodystream;
-        bodystream << "<html><h1> " << response_code << " " << response_reason << "</h1></html>"; 
-        std::string body = bodystream.str();
-        int content_length = body.length();
-
-        std::cout << "ADDING HEADERS...." << '\n';
         
-        response.headers.push_back(Response_header("Date", date));
-        response.headers.push_back(Response_header("Server", SERVER_VALUE));
-        response.headers.push_back(Response_header("Connection", keep_alive ? "keep-alive" : "close"));
-        response.headers.push_back(Response_header("Content-Type", content_type));
-        response.headers.push_back(Response_header("Content-Length", std::to_string(content_length)));
-        response.headers.push_back(Response_header("Last-Modified", last_modified));
-        
-        return response;
+        return create_error_response(response_code, response_reason, keep_alive ? "keep-alive" : "close");
 }
 
-
-Response process_request(int socketFd){
+int serve_http(int socketFd){
     std::cout << "PROCESSING REQUEST" << "\n";
     BufferInfo buffer_info;
 
@@ -115,48 +97,80 @@ Response process_request(int socketFd){
     int readBytes;
     std::string line;
     std::string request_string = "";
+
+
+    // we need to time this while loop for bad requests that never end for some time
+
+    std::chrono::time_point start = std::chrono::steady_clock::now();
     while ((readBytes = read_line_swag(socketFd, buf, BUFSIZE, buffer_info, 8000)) > 0) {
-        std::cout << "READ BYTES: " << readBytes << "\n";
-        std::cout << "BUFFER: " << buf << "\n";
+        std::cout << "DEBUG: READ BYTES: " << readBytes << "\n";
+        std::cout << "DEBUG: BUFFER: " << buf << "\n";
         line = std::string(buf);
         request_string += line;
         if(line == "\r\n"){
             break;
         }
+        // if the while loop doesn't end in 20 seconds, we assume that the request is bad
+        if(std::chrono::steady_clock::now() - start > std::chrono::seconds(20)){
+            readBytes = -2; // not sure if this is a good idea but whatever...
+            break;
+        } 
     }
     // error
     if(readBytes == -1){
         std::cout << "DEBUG: ERROR" << '\n';
-        return Response();
+        Response response = bad_request_response();
+        std::string response_string = response_to_string(response);
+        std::cout << "DEBUG: RESPONSE STRING ON ERROR:"  << "\n" << response_string << "\n";
+
+        write_all(socketFd, response_string.data(), get_response_size(response));
+        return -1;
     }
     // timeout
     if(readBytes == -2){
         std::cout << "DEBUG: REQUEST TIMEOUT" << '\n';
-        return Response();
+        Response response = timeout_response();
+
+        std::string response_string = response_to_string(response);
+        std::cout << "DEBUG: RESPONSE STRING ON TIMEOUT:"  << "\n" << response_string << "\n";
+        write_all(socketFd, response_string.data(), get_response_size(response));
+        return -2;
     }
 
-    std::cout << "REQUEST STRING: " << request_string << "\n";
-    write_all(socketFd, request_string.data(), request_string.size());
 
-    std::cout << "START PARSING" << "\n";
-    ParseResult result = parse(buf, strlen(buf));
+    std::cout << "DEBUG: REQUEST STRING: " << request_string << "\n";
+    Response response;
 
+    ParseResult result = parse(request_string.data(), request_string.size());
     if(!result.success){
-        return create_error_response(result);
+        response = error_response(result);
+        std::string response_string = response_to_string(response);
+        std::cout << "DEBUG: RESPONSE STRING ON SUCCESS:"  << "\n" << response_string << "\n";
+        write_all(socketFd, response_string.data(), get_response_size(response));
+        return EXIT_SUCCESS;
+    }
+    
+    // we can finally handle our good requests, unless its a 404 or unimplemented :(
+
+    Request* request = result.request;
+    std::string method = request->http_method;
+    if(method == "GET"){
+        response = get_response(*request, root);
+    }
+    else if(method == "HEAD"){
+        response = head_response(*request, root);
+    }
+    else{
+        response = unimplemented_response();
     }
 
-    return Response();
-} 
-
-int write_response_to_socket(Response response, int socketFd){
 
     std::string response_string = response_to_string(response);
-    int response_size = get_response_size(response);
-    std::cout << "TEST====== \n" << response_string << '\n';
-    char* response_buf = response_string.data();
-    write_all(socketFd, response_buf, response_size);
+    std::cout << "DEBUG: RESPONSE STRING ON SUCCESS:"  << "\n" << response_string << "\n";
+    write_all(socketFd, response_string.data(), get_response_size(response));
     return EXIT_SUCCESS;
-}
+
+} 
 
 int start_server(){
     std::cout << "Starting server on port:" << port << " at root directory: " << root << '\n';
@@ -180,8 +194,9 @@ int start_server(){
             continue;
         }
 
-        // pass work
-        process_request(connFd);
+        // TODO: pass work to thread later
+        int res = serve_http(connFd);
+        //close(connFd);
     }
     close(listenFd);
     return EXIT_SUCCESS;
