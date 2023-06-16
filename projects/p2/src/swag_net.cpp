@@ -1,6 +1,6 @@
 #include "swag_net.hpp"
 #include <poll.h>
-#include<iostream>
+#include <iostream>
 
 int read_line_swag(int connFd, char *usrbuf, size_t maxlen, BufferInfo& bufinfo, float timeout){
     auto& [buffer, buffer_size, buffer_offset, isClosed] = bufinfo;
@@ -23,9 +23,8 @@ int read_line_swag(int connFd, char *usrbuf, size_t maxlen, BufferInfo& bufinfo,
     else if (bufinfo.buffer_offset >= bufinfo.buffer_size){
         int n;
         memset(buffer, 0, READBUFCAPACITY);
+
         // read from the socket
-
-
         struct pollfd pollfd;
         pollfd.fd = connFd;
         pollfd.events = POLLIN;

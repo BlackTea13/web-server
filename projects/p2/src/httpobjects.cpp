@@ -17,7 +17,6 @@ std::string response_to_string(Response response){
     response_string += response.response_body;
 
     return response_string;
-
 }
 
 
@@ -197,10 +196,11 @@ Response get_response(Request request, std::string root_dir){
 
     std::string body = "";
     
-    std::filesystem::path cwd = std::filesystem::current_path() / "filename.txt";
-    std::ofstream file2(cwd.string());
-    file2.close();
+    std::filesystem::path cwd = std::filesystem::current_path() / full_filepath;
     std::cout << "pwd:" << std::filesystem::current_path() << '\n';
+
+    std::filesystem::file_time_type ftime = std::filesystem::last_write_time(cwd);
+    
 
     std::ifstream file(root_dir + filepath, std::ios::binary);
     if(file.is_open()){
@@ -252,14 +252,14 @@ Response head_response(Request request, std::string root_dir){
     std::cout << "filepath " << full_filepath << std::endl;
 
     std::string body = "";
-    
-    std::filesystem::path cwd = std::filesystem::current_path() / "filename.txt";
-    std::ofstream file2(cwd.string());
-    file2.close();
     std::cout << "pwd:" << std::filesystem::current_path() << '\n';
 
     std::ifstream file(root_dir + filepath, std::ios::binary);
     if(file.is_open()){
+        std::string line;
+        while(getline(file, line)){
+            body += line;
+        }
         file.close();
     } else {
         return create_error_response(404, "Not Found", connection);

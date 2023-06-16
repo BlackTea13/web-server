@@ -1,6 +1,7 @@
 #pragma once
 #include "globals.hpp"
 #include <sstream>
+#include <vector>
 #include <unordered_map>
 
 //Enum ResponseCodes

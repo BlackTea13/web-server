@@ -85,27 +85,27 @@ Response error_response(ParseResult result){
 
 int write_response_to_socket(int socketFd, Response response){
     std::string response_string = response_to_string(response);
-    char* dataPtr = response_string.data();
+    char* response_ptr = response_string.data();
     size_t totalBytes = response_string.size();
-    size_t bytesSent = 0;
-    size_t chunkSize = 1024; // Chunk size for sending data
+    size_t bytesWritten = 0;
 
-    while (bytesSent < totalBytes) {
-        size_t bytesRemaining = totalBytes - bytesSent;
-        size_t bytesToWrite = (bytesRemaining < chunkSize) ? bytesRemaining : chunkSize;
+    while (bytesWritten < totalBytes) {
+        size_t bytesRemaining = totalBytes - bytesWritten;
+        size_t bytesToWrite = (bytesRemaining < BUFSIZE) ? bytesRemaining : BUFSIZE;
 
-        write_all(socketFd, const_cast<char*>(dataPtr + bytesSent), bytesToWrite);
+        write_all(socketFd, (response_ptr + bytesWritten), bytesToWrite);
 
-        bytesSent += bytesToWrite;
+        bytesWritten += bytesToWrite;
     }
 }
+
 
 int serve_http(int socketFd){
     std::cout << "PROCESSING REQUEST" << "\n";
     BufferInfo buffer_info;
 
 
-    if(buffer_map.count(socketFd) < 0){ // TRUE if socketFd is not in buffer_map
+    if(buffer_map.count(socketFd) <= 0){ // TRUE if socketFd is not in buffer_map
         buffer_info = BufferInfo();
         buffer_map[socketFd] = buffer_info;
     }
@@ -116,8 +116,7 @@ int serve_http(int socketFd){
     std::string line;
     std::string request_string = "";
 
-
-    // we need to time this while loop for bad requests that never end for some time
+    // we need to time this while loop for bad requests that never end
     std::chrono::time_point start = std::chrono::steady_clock::now();
     while ((readBytes = read_line_swag(socketFd, buf, BUFSIZE, buffer_info, 8000)) > 0) {
         std::cout << "DEBUG: READ BYTES: " << readBytes << "\n";
@@ -168,7 +167,7 @@ int serve_http(int socketFd){
     }
     
     // we can finally handle our good requests, unless its a 404 or unimplemented :(
-
+    // 404 is handled in the GET and HEAD functions
     Request* request = result.request;
     std::string method = request->http_method;
     if(method == "GET"){
@@ -176,16 +175,17 @@ int serve_http(int socketFd){
     }
     else if(method == "HEAD"){
         response = head_response(*request, root);
+        response.response_body = "";
     }
     else{
         response = unimplemented_response();
     }
 
-    std::cout << "DEBUG: RESPONSE STRING CREATED SUCCESSFULLY" << '\n';
+    std::string response_string = response_to_string(response);
+    std::cout << "DEBUG: RESPONSE STRING ON SUCCESS:"  << "\n" << response_string << "\n";
     write_response_to_socket(socketFd, response);
-    std::cout <<"finished write\n";
+    std::cout << "DEBUG: RESPONSE SENT" << "\n";
     return EXIT_SUCCESS;
-
 } 
 
 int start_server(){

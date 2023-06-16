@@ -1,7 +1,4 @@
 #pragma once
-#include <vector>
-#include <string>
-#include <unordered_set>
 #include <chrono>
 #include <cstring>
 
@@ -13,4 +10,4 @@
 
 
 static const char* RFC1123_TIME_FMT = "%a, %d %b %Y %H:%M:%S GMT";
-static const char* SERVER_VALUE = "Rob";
+static const char* SERVER_VALUE = "Rob's cool server B)";
