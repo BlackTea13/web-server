@@ -1,4 +1,4 @@
-#pragma once//Header field
+#pragma once
 #include "globals.hpp"
 #include <sstream>
 #include <unordered_map>

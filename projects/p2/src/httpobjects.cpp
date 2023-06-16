@@ -1,3 +1,9 @@
+#include <fstream>
+#include <iostream>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
+#include <filesystem>
 #include "httpobjects.hpp"
 
 
@@ -85,6 +91,24 @@ Response bad_request_response(){
     return response;
 }
 
+Response unimplemented_response(){
+        Response response = Response(
+        501,
+        "Not Implemented",
+        std::vector<Response_header>(),
+        "<html><body><h1>501 Not Implemented</h1></body></html>"
+    );
+
+    std::string curDateTime = RFC1123_DateTimeNow();
+    response.headers.push_back(Response_header("Date", curDateTime));
+    response.headers.push_back(Response_header("Server", SERVER_VALUE));
+    response.headers.push_back(Response_header("Connection", "keep-alive"));
+    response.headers.push_back(Response_header("Content-Type", "text/html"));
+    response.headers.push_back(Response_header("Content-Length", std::to_string(response.response_body.size())));
+    response.headers.push_back(Response_header("Last-Modified", curDateTime));
+    return response;
+}
+
 Response timeout_response(){
     Response response = Response(
         408,
@@ -142,9 +166,94 @@ Response create_good_response(std::string connection, std::string body, std::str
 }
 
 Response get_response(Request request, std::string root_dir){
+    std::string connection = "keep-alive";
+    if(header_name_in_request(&request, "Connection")){
+        connection = request.headers[0].header_value;
+    }
 
+    std::string filepath = request.http_uri;
+    if(filepath == ""){
+        return create_error_response(404, "Not Found", connection);
+    }
+
+    std::string content_type = "text/html";
+    if(filepath.find(".html") != std::string::npos){
+        content_type = "text/html";
+    } else if(filepath.find(".jpg") != std::string::npos){
+        content_type = "image/jpeg";
+    } else if(filepath.find(".png") != std::string::npos){
+        content_type = "image/png";
+    } else if(filepath.find(".gif") != std::string::npos){
+        content_type = "image/gif";
+    } else if(filepath.find(".txt") != std::string::npos){
+        content_type = "text/plain";
+    } else if(filepath.find(".css") != std::string::npos){
+        content_type = "text/css";
+    } else if(filepath.find(".js") != std::string::npos){
+        content_type = "text/javascript";
+    }
+
+    std::string full_filepath = root_dir + filepath;
+    std::cout << "filepath " << full_filepath << std::endl;
+
+    std::string body = "";
+    
+    std::filesystem::path cwd = std::filesystem::current_path() / "filename.txt";
+    std::ofstream file2(cwd.string());
+    file2.close();
+    std::cout << "pwd:" << std::filesystem::current_path() << '\n';
+
+    std::ifstream file(root_dir + filepath);
+    if(file.is_open()){
+        std::string line;
+        while(getline(file, line)){
+            body += line;
+        }
+        file.close();
+    } else {
+        return create_error_response(404, "Not Found", connection);
+    }
+
+    return create_good_response(connection, body, content_type);
 }
 
 Response head_response(Request request, std::string root_dir){
-    
+    std::string filepath = root_dir + request.http_uri;
+
+    std::string connection = "keep-alive";
+    if(header_name_in_request(&request, "Connection")){
+        connection = request.headers[0].header_value;
+    }
+
+    if(filepath == ""){
+        return create_error_response(404, "Not Found", connection);
+    }
+
+    std::string content_type = "text/html";
+    if(filepath.find(".html") != std::string::npos){
+        content_type = "text/html";
+    } else if(filepath.find(".jpg") != std::string::npos){
+        content_type = "image/jpeg";
+    } else if(filepath.find(".png") != std::string::npos){
+        content_type = "image/png";
+    } else if(filepath.find(".gif") != std::string::npos){
+        content_type = "image/gif";
+    } else if(filepath.find(".txt") != std::string::npos){
+        content_type = "text/plain";
+    } else if(filepath.find(".css") != std::string::npos){
+        content_type = "text/css";
+    } else if(filepath.find(".js") != std::string::npos){
+        content_type = "text/javascript";
+    }
+
+    std::string full_filepath = root_dir + filepath;
+    std::string body = "";
+    std::ifstream file(root_dir + filepath);
+    if(file.is_open()){
+        file.close();
+    } else {
+        return create_error_response(404, "Not Found", connection);
+    }
+
+    return create_good_response(connection, body, content_type);
 }

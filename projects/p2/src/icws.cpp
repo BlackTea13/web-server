@@ -100,7 +100,6 @@ int serve_http(int socketFd){
 
 
     // we need to time this while loop for bad requests that never end for some time
-
     std::chrono::time_point start = std::chrono::steady_clock::now();
     while ((readBytes = read_line_swag(socketFd, buf, BUFSIZE, buffer_info, 8000)) > 0) {
         std::cout << "DEBUG: READ BYTES: " << readBytes << "\n";
@@ -138,7 +137,7 @@ int serve_http(int socketFd){
     }
 
 
-    std::cout << "DEBUG: REQUEST STRING: " << request_string << "\n";
+    std::cout << "DEBUG: REQUEST STRING:\n" << request_string << "\n";
     Response response;
 
     ParseResult result = parse(request_string.data(), request_string.size());
@@ -168,6 +167,7 @@ int serve_http(int socketFd){
     std::string response_string = response_to_string(response);
     std::cout << "DEBUG: RESPONSE STRING ON SUCCESS:"  << "\n" << response_string << "\n";
     write_all(socketFd, response_string.data(), get_response_size(response));
+    std::cout <<"finished write\n";
     return EXIT_SUCCESS;
 
 } 
@@ -196,7 +196,7 @@ int start_server(){
 
         // TODO: pass work to thread later
         int res = serve_http(connFd);
-        //close(connFd);
+        close(connFd);
     }
     close(listenFd);
     return EXIT_SUCCESS;
