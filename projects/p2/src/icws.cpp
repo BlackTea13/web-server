@@ -7,6 +7,7 @@
 #include <netdb.h>
 #include <poll.h>
 #include <unordered_map>
+#include <fcntl.h>
 #include "parse.h"
 #include "pcsa_net.hpp"
 #include "swag_net.hpp"
@@ -80,6 +81,23 @@ Response error_response(ParseResult result){
         }
         
         return create_error_response(response_code, response_reason, keep_alive ? "keep-alive" : "close");
+}
+
+int write_response_to_socket(int socketFd, Response response){
+    std::string response_string = response_to_string(response);
+    char* dataPtr = response_string.data();
+    size_t totalBytes = response_string.size();
+    size_t bytesSent = 0;
+    size_t chunkSize = 1024; // Chunk size for sending data
+
+    while (bytesSent < totalBytes) {
+        size_t bytesRemaining = totalBytes - bytesSent;
+        size_t bytesToWrite = (bytesRemaining < chunkSize) ? bytesRemaining : chunkSize;
+
+        write_all(socketFd, const_cast<char*>(dataPtr + bytesSent), bytesToWrite);
+
+        bytesSent += bytesToWrite;
+    }
 }
 
 int serve_http(int socketFd){
@@ -163,10 +181,8 @@ int serve_http(int socketFd){
         response = unimplemented_response();
     }
 
-
-    std::string response_string = response_to_string(response);
-    std::cout << "DEBUG: RESPONSE STRING ON SUCCESS:"  << "\n" << response_string << "\n";
-    write_all(socketFd, response_string.data(), get_response_size(response));
+    std::cout << "DEBUG: RESPONSE STRING CREATED SUCCESSFULLY" << '\n';
+    write_response_to_socket(socketFd, response);
     std::cout <<"finished write\n";
     return EXIT_SUCCESS;
 

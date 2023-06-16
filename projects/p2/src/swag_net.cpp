@@ -26,13 +26,13 @@ int read_line_swag(int connFd, char *usrbuf, size_t maxlen, BufferInfo& bufinfo,
         // read from the socket
 
 
-        struct pollfd pollfd[1];
-        pollfd[0].fd = connFd;
-        pollfd[0].events = POLLIN;
-        int pollRet = poll(pollfd, 1, timeout);
+        struct pollfd pollfd;
+        pollfd.fd = connFd;
+        pollfd.events = POLLIN;
+        int pollRet = poll(&pollfd, 1, timeout);
         if (pollRet == 0) return -2; // timeout
-        if (pollRet < 0) return -1; // error
-        if (pollfd[0].revents & POLLIN){
+        else if (pollRet < 0) return -1; // error
+        else {
             // socket is ready
             n = read(connFd, bufinfo.buffer, READBUFCAPACITY);
         }

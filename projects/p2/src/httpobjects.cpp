@@ -44,7 +44,6 @@ bool header_name_in_request(Request* request, std::string header_name){
 
 int get_response_size(Response response){
     int total = 0;
-    total += response.response_body.size();
     for(auto header : response.headers){
         total += header.header_name.size() + header.header_value.size();
     }
@@ -135,15 +134,11 @@ Response create_error_response(int code, std::string reason, std::string connect
     bodystream << "<html><h1> " << code << " " << reason << "</h1></html>"; 
     std::string body = bodystream.str();
 
-    std::string con = "keep-alive";
-    auto it = connection_header.find(code);
-    if(it != connection_header.end()){
-        con = "close";
-    }
+    std::cout<<"CONNECTIOH: "<<connection<<"\n";
 
     new_headers.push_back(Response_header("Date", curDateTime));
     new_headers.push_back(Response_header("Server", SERVER_VALUE));
-    new_headers.push_back(Response_header("Connection", con));
+    new_headers.push_back(Response_header("Connection", connection));
     new_headers.push_back(Response_header("Content-Type", "text/html"));
     new_headers.push_back(Response_header("Content-Length", std::to_string(body.size())));
     new_headers.push_back(Response_header("Last-Modified", curDateTime));
@@ -168,7 +163,11 @@ Response create_good_response(std::string connection, std::string body, std::str
 Response get_response(Request request, std::string root_dir){
     std::string connection = "keep-alive";
     if(header_name_in_request(&request, "Connection")){
-        connection = request.headers[0].header_value;
+        for(int i = 0; i < request.header_count; i++){
+            if(strcmp(request.headers[i].header_name, "Connection") == 0){
+                connection = request.headers[i].header_value;
+            }
+        }
     }
 
     std::string filepath = request.http_uri;
@@ -203,7 +202,7 @@ Response get_response(Request request, std::string root_dir){
     file2.close();
     std::cout << "pwd:" << std::filesystem::current_path() << '\n';
 
-    std::ifstream file(root_dir + filepath);
+    std::ifstream file(root_dir + filepath, std::ios::binary);
     if(file.is_open()){
         std::string line;
         while(getline(file, line)){
@@ -218,13 +217,16 @@ Response get_response(Request request, std::string root_dir){
 }
 
 Response head_response(Request request, std::string root_dir){
-    std::string filepath = root_dir + request.http_uri;
-
     std::string connection = "keep-alive";
     if(header_name_in_request(&request, "Connection")){
-        connection = request.headers[0].header_value;
+        for(int i = 0; i < request.header_count; i++){
+            if(strcmp(request.headers[i].header_name, "Connection") == 0){
+                connection = request.headers[i].header_value;
+            }
+        }
     }
 
+    std::string filepath = request.http_uri;
     if(filepath == ""){
         return create_error_response(404, "Not Found", connection);
     }
@@ -247,8 +249,16 @@ Response head_response(Request request, std::string root_dir){
     }
 
     std::string full_filepath = root_dir + filepath;
+    std::cout << "filepath " << full_filepath << std::endl;
+
     std::string body = "";
-    std::ifstream file(root_dir + filepath);
+    
+    std::filesystem::path cwd = std::filesystem::current_path() / "filename.txt";
+    std::ofstream file2(cwd.string());
+    file2.close();
+    std::cout << "pwd:" << std::filesystem::current_path() << '\n';
+
+    std::ifstream file(root_dir + filepath, std::ios::binary);
     if(file.is_open()){
         file.close();
     } else {

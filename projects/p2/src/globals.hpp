@@ -13,4 +13,4 @@
 
 
 static const char* RFC1123_TIME_FMT = "%a, %d %b %Y %H:%M:%S GMT";
-static const char* SERVER_VALUE = "Rob's Cool P2 Server B)";
+static const char* SERVER_VALUE = "Rob";
