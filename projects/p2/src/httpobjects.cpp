@@ -153,7 +153,7 @@ Response create_good_response(std::string connection, std::string body, std::str
     new_headers.push_back(Response_header("Server", SERVER_VALUE));
     new_headers.push_back(Response_header("Connection", connection));
     new_headers.push_back(Response_header("Content-Type", content_type));
-    new_headers.push_back(Response_header("Content-Length", std::to_string(body.size())));
+    new_headers.push_back(Response_header("Content-Length", std::string("402,865")));
     new_headers.push_back(Response_header("Last-Modified", curDateTime));
 
     return Response(200, "OK", new_headers, body);
@@ -199,8 +199,9 @@ Response get_response(Request request, std::string root_dir){
     std::filesystem::path cwd = std::filesystem::current_path() / full_filepath;
     std::cout << "pwd:" << std::filesystem::current_path() << '\n';
 
-    std::filesystem::file_time_type ftime = std::filesystem::last_write_time(cwd);
+    //std::filesystem::file_time_type ftime = std::filesystem::last_write_time(cwd);
     
+
 
     std::ifstream file(root_dir + filepath, std::ios::binary);
     if(file.is_open()){
