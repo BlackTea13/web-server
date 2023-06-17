@@ -7,6 +7,28 @@
 #include "httpobjects.hpp"
 
 
+
+std::string get_content_type(std::string filepath){
+    std::string content_type = "text/html";
+    if(filepath.find(".html") != std::string::npos){
+        content_type = "text/html";
+    } else if(filepath.find(".jpg") != std::string::npos){
+        content_type = "image/jpeg";
+    } else if(filepath.find(".png") != std::string::npos){
+        content_type = "image/png";
+    } else if(filepath.find(".gif") != std::string::npos){
+        content_type = "image/gif";
+    } else if(filepath.find(".txt") != std::string::npos){
+        content_type = "text/plain";
+    } else if(filepath.find(".css") != std::string::npos){
+        content_type = "text/css";
+    } else if(filepath.find(".js") != std::string::npos){
+        content_type = "text/javascript";
+    }
+    return content_type;
+}
+
+
 std::string response_to_string(Response response){
     std::string response_string = "";
     response_string += "HTTP/1.1 " + std::to_string(response.response_code) + " " + response.response_reason + "\r\n";
@@ -20,7 +42,7 @@ std::string response_to_string(Response response){
 }
 
 
-std::string RFC1123_DateTimeNow(){
+std::string datetime_rfc1123(){
     auto now = std::chrono::system_clock::now();
     std::time_t currentTime = std::chrono::system_clock::to_time_t(now);
     std::tm* gmtm = std::gmtime(&currentTime);
@@ -76,16 +98,15 @@ Response bad_request_response(){
         std::vector<Response_header>(),
         "<html><body><h1>400 Bad Request</h1></body></html>"
     );
- 
-    // <img src=""../static/cat.jpg"" alt=""cat"">
 
-    std::string curDateTime = RFC1123_DateTimeNow();
-    response.headers.push_back(Response_header("Date", curDateTime));
-    response.headers.push_back(Response_header("Server", SERVER_VALUE));
-    response.headers.push_back(Response_header("Connection", "keep-alive"));
-    response.headers.push_back(Response_header("Content-Type", "text/html"));
-    response.headers.push_back(Response_header("Content-Length", std::to_string(response.response_body.size())));
-    response.headers.push_back(Response_header("Last-Modified", curDateTime));
+    std::string curDateTime = datetime_rfc1123();
+    response.headers = create_response_header_vec(
+        curDateTime,
+        curDateTime,
+        "text/html",
+        std::to_string(response.response_body.size()),
+        "keep-alive"
+    );
     return response;
 }
 
@@ -97,13 +118,15 @@ Response unimplemented_response(){
         "<html><body><h1>501 Not Implemented</h1></body></html>"
     );
 
-    std::string curDateTime = RFC1123_DateTimeNow();
-    response.headers.push_back(Response_header("Date", curDateTime));
-    response.headers.push_back(Response_header("Server", SERVER_VALUE));
-    response.headers.push_back(Response_header("Connection", "keep-alive"));
-    response.headers.push_back(Response_header("Content-Type", "text/html"));
-    response.headers.push_back(Response_header("Content-Length", std::to_string(response.response_body.size())));
-    response.headers.push_back(Response_header("Last-Modified", curDateTime));
+    std::string curDateTime = datetime_rfc1123();
+    response.headers = create_response_header_vec(
+        curDateTime,
+        curDateTime,
+        "text/html",
+        std::to_string(response.response_body.size()),
+        "keep-alive"
+    );
+    
     return response;
 }
 
@@ -114,47 +137,44 @@ Response timeout_response(){
         std::vector<Response_header>(),
         "<html><body><h1>408 Request Timeout</h1></body></html>"
     );
-
-    std::string curDateTime = RFC1123_DateTimeNow();
-    response.headers.push_back(Response_header("Date", curDateTime));
-    response.headers.push_back(Response_header("Server", SERVER_VALUE));
-    response.headers.push_back(Response_header("Connection", "close"));
-    response.headers.push_back(Response_header("Content-Type", "text/html"));
-    response.headers.push_back(Response_header("Content-Length", std::to_string(response.response_body.size())));
-    response.headers.push_back(Response_header("Last-Modified", curDateTime));
+    std::string curDateTime = datetime_rfc1123();
+    response.headers = create_response_header_vec(
+        curDateTime,
+        curDateTime,
+        "text/html",
+        std::to_string(response.response_body.size()),
+        "keep-alive"
+    );
     return response;
 }
 
 Response create_error_response(int code, std::string reason, std::string connection){
     std::string curDateTime = RFC1123_DateTimeNow();
-    std::vector<Response_header> new_headers;
 
     std::ostringstream bodystream;
     bodystream << "<html><h1> " << code << " " << reason << "</h1></html>"; 
     std::string body = bodystream.str();
 
-    std::cout<<"CONNECTIOH: "<<connection<<"\n";
-
-    new_headers.push_back(Response_header("Date", curDateTime));
-    new_headers.push_back(Response_header("Server", SERVER_VALUE));
-    new_headers.push_back(Response_header("Connection", connection));
-    new_headers.push_back(Response_header("Content-Type", "text/html"));
-    new_headers.push_back(Response_header("Content-Length", std::to_string(body.size())));
-    new_headers.push_back(Response_header("Last-Modified", curDateTime));
+    std::vector<Response_header> new_headers = create_response_header_vec(
+        curDateTime,
+        curDateTime,
+        "text/html",
+        std::to_string(body.size()),
+        connection
+    );
 
     return Response(code, reason, new_headers, body);
 }
 
 Response create_good_response(std::string connection, std::string body, std::string content_type){
-    std::string curDateTime = RFC1123_DateTimeNow();
-    std::vector<Response_header> new_headers;
-
-    new_headers.push_back(Response_header("Date", curDateTime));
-    new_headers.push_back(Response_header("Server", SERVER_VALUE));
-    new_headers.push_back(Response_header("Connection", connection));
-    new_headers.push_back(Response_header("Content-Type", content_type));
-    new_headers.push_back(Response_header("Content-Length", std::string("402,865")));
-    new_headers.push_back(Response_header("Last-Modified", curDateTime));
+    std::string curDateTime = datetime_rfc1123();
+    std::vector<Response_header> new_headers = create_response_header_vec(
+        curDateTime,
+        curDateTime,
+        content_type,
+        std::to_string(body.size()),
+        connection
+    );
 
     return Response(200, "OK", new_headers, body);
 }
@@ -174,22 +194,7 @@ Response get_response(Request request, std::string root_dir){
         return create_error_response(404, "Not Found", connection);
     }
 
-    std::string content_type = "text/html";
-    if(filepath.find(".html") != std::string::npos){
-        content_type = "text/html";
-    } else if(filepath.find(".jpg") != std::string::npos){
-        content_type = "image/jpeg";
-    } else if(filepath.find(".png") != std::string::npos){
-        content_type = "image/png";
-    } else if(filepath.find(".gif") != std::string::npos){
-        content_type = "image/gif";
-    } else if(filepath.find(".txt") != std::string::npos){
-        content_type = "text/plain";
-    } else if(filepath.find(".css") != std::string::npos){
-        content_type = "text/css";
-    } else if(filepath.find(".js") != std::string::npos){
-        content_type = "text/javascript";
-    }
+    std::string content_type = get_content_type(filepath);
 
     std::string full_filepath = root_dir + filepath;
     std::cout << "filepath " << full_filepath << std::endl;
@@ -198,10 +203,6 @@ Response get_response(Request request, std::string root_dir){
     
     std::filesystem::path cwd = std::filesystem::current_path() / full_filepath;
     std::cout << "pwd:" << std::filesystem::current_path() << '\n';
-
-    //std::filesystem::file_time_type ftime = std::filesystem::last_write_time(cwd);
-    
-
 
     std::ifstream file(root_dir + filepath, std::ios::binary);
     if(file.is_open()){
@@ -232,22 +233,7 @@ Response head_response(Request request, std::string root_dir){
         return create_error_response(404, "Not Found", connection);
     }
 
-    std::string content_type = "text/html";
-    if(filepath.find(".html") != std::string::npos){
-        content_type = "text/html";
-    } else if(filepath.find(".jpg") != std::string::npos){
-        content_type = "image/jpeg";
-    } else if(filepath.find(".png") != std::string::npos){
-        content_type = "image/png";
-    } else if(filepath.find(".gif") != std::string::npos){
-        content_type = "image/gif";
-    } else if(filepath.find(".txt") != std::string::npos){
-        content_type = "text/plain";
-    } else if(filepath.find(".css") != std::string::npos){
-        content_type = "text/css";
-    } else if(filepath.find(".js") != std::string::npos){
-        content_type = "text/javascript";
-    }
+    std::string content_type = get_content_type(filepath);
 
     std::string full_filepath = root_dir + filepath;
     std::cout << "filepath " << full_filepath << std::endl;
