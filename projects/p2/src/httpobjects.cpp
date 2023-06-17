@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <filesystem>
+#include <limits>
 #include "httpobjects.hpp"
 
 
@@ -38,6 +39,16 @@ std::string response_to_string(Response response){
     response_string += "\r\n";
     response_string += response.response_body;
 
+    return response_string;
+}
+
+std::string response_headers_to_string(Response response){
+    std::string response_string = "";
+    response_string += "HTTP/1.1 " + std::to_string(response.response_code) + " " + response.response_reason + "\r\n";
+    for (auto header : response.headers){
+        response_string += header.header_name + ": " + header.header_value + "\r\n";
+    }
+    response_string += "\r\n";
     return response_string;
 }
 
@@ -166,19 +177,6 @@ Response create_error_response(int code, std::string reason, std::string connect
     return Response(code, reason, new_headers, body);
 }
 
-Response create_good_response(std::string connection, std::string body, std::string content_type){
-    std::string curDateTime = datetime_rfc1123();
-    std::vector<Response_header> new_headers = create_response_header_vec(
-        curDateTime,
-        curDateTime,
-        content_type,
-        std::to_string(body.size()),
-        connection
-    );
-
-    return Response(200, "OK", new_headers, body);
-}
-
 Response get_response(Request request, std::string root_dir){
     std::string connection = "keep-alive";
     if(header_name_in_request(&request, "Connection")){
@@ -204,18 +202,37 @@ Response get_response(Request request, std::string root_dir){
     std::filesystem::path cwd = std::filesystem::current_path() / full_filepath;
     std::cout << "pwd:" << std::filesystem::current_path() << '\n';
 
-    std::ifstream file(root_dir + filepath, std::ios::binary);
+    std::ifstream file(full_filepath, std::ios::binary);
+    file.ignore(std::numeric_limits<std::streamsize>::max());
+    std::streamsize length = file.gcount();
+    file.clear();
+    file.seekg(0, std::ios_base::beg);
+    
     if(file.is_open()){
-        std::string line;
-        while(getline(file, line)){
-            body += line;
+        std::vector<char> buffer (BUFSIZE, 0);
+        while(!file.eof()) {
+            file.read(buffer.data(), buffer.size());
+            std::streamsize s = file.gcount();
+            body.append(buffer.data(), s);
         }
-        file.close();
     } else {
         return create_error_response(404, "Not Found", connection);
     }
 
-    return create_good_response(connection, body, content_type);
+
+    // now we can create our response
+    Response response;
+    response.response_code = 200;
+    response.response_reason = "OK";
+    response.response_body = body;
+    response.headers = create_response_header_vec(
+        datetime_rfc1123(),
+        datetime_rfc1123(),
+        content_type,
+        std::to_string(length),
+        connection
+    );
+    return response;
 }
 
 Response head_response(Request request, std::string root_dir){
@@ -241,16 +258,29 @@ Response head_response(Request request, std::string root_dir){
     std::string body = "";
     std::cout << "pwd:" << std::filesystem::current_path() << '\n';
 
-    std::ifstream file(root_dir + filepath, std::ios::binary);
+    std::ifstream file(full_filepath, std::ios::binary);
+    file.ignore(std::numeric_limits<std::streamsize>::max());
+    std::streamsize length = file.gcount();
+    file.clear();
+    file.seekg(0, std::ios_base::beg);
+
     if(file.is_open()){
-        std::string line;
-        while(getline(file, line)){
-            body += line;
-        }
         file.close();
     } else {
         return create_error_response(404, "Not Found", connection);
     }
 
-    return create_good_response(connection, body, content_type);
+    // now we can create our response
+    Response response;
+    response.response_code = 200;
+    response.response_reason = "OK";
+    response.response_body = "";
+    response.headers = create_response_header_vec(
+        datetime_rfc1123(),
+        datetime_rfc1123(),
+        content_type,
+        std::to_string(length),
+        connection
+    );
+    return response;
 }

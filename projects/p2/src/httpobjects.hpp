@@ -78,6 +78,7 @@ static std::unordered_map<int, std::string> connection_header = {
 
 
 // HTTP Response functions
+std::string response_headers_to_string(Response response);
 std::string response_to_string(Response response);
 std::vector<std::string> request_headers_to_vec(Request request);
 bool header_name_in_request(Request* request, std::string header_name);

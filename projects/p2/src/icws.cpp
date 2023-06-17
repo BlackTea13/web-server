@@ -84,6 +84,7 @@ Response error_response(ParseResult result){
 }
 
 int write_response_to_socket(int socketFd, Response response){
+    // send headers first
     std::string response_string = response_to_string(response);
     char* response_ptr = response_string.data();
     size_t totalBytes = response_string.size();
@@ -97,6 +98,8 @@ int write_response_to_socket(int socketFd, Response response){
 
         bytesWritten += bytesToWrite;
     }
+
+    return EXIT_SUCCESS;
 }
 
 
@@ -181,7 +184,7 @@ int serve_http(int socketFd){
         response = unimplemented_response();
     }
 
-    std::string response_string = response_to_string(response);
+    std::string response_string = response_headers_to_string(response);
     std::cout << "DEBUG: RESPONSE STRING ON SUCCESS:"  << "\n" << response_string << "\n";
     write_response_to_socket(socketFd, response);
     std::cout << "DEBUG: RESPONSE SENT" << "\n";
