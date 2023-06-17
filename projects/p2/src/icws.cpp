@@ -70,7 +70,7 @@ Response error_response(ParseResult result){
         int response_code = result.response_code;
         std::string response_reason = result.response_reason;
         Request* request = result.request;
-        std::string date = RFC1123_DateTimeNow();
+        std::string date = datetime_rfc1123();
         std::string last_modified = date;
         
         // we take the connection parameter from the response

@@ -82,7 +82,7 @@ std::string response_to_string(Response response);
 std::vector<std::string> request_headers_to_vec(Request request);
 bool header_name_in_request(Request* request, std::string header_name);
 int get_response_size(Response response);
-std::string RFC1123_DateTimeNow();
+std::string datetime_rfc1123();
 
 Response timeout_response();
 Response bad_request_response();

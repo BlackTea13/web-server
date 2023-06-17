@@ -149,7 +149,7 @@ Response timeout_response(){
 }
 
 Response create_error_response(int code, std::string reason, std::string connection){
-    std::string curDateTime = RFC1123_DateTimeNow();
+    std::string curDateTime = datetime_rfc1123();
 
     std::ostringstream bodystream;
     bodystream << "<html><h1> " << code << " " << reason << "</h1></html>"; 
