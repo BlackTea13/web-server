@@ -140,7 +140,6 @@ void serve_http(int socketFd){
         std::cout << "DEBUG: RESPONSE STRING ON ERROR:"  << "\n" << response_string << "\n";
 
         write_all(socketFd, response_string.data(), get_response_size(response));
-        std::this_thread::sleep_for(std::chrono::seconds(1000));
         serve_http(socketFd);
     }
     // timeout
