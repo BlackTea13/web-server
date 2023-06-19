@@ -5,6 +5,8 @@
 int read_line_swag(int connFd, char *usrbuf, size_t maxlen, BufferInfo& bufinfo, float timeout){
     auto& [buffer, buffer_size, buffer_offset, isClosed] = bufinfo;
     char c, *bufp = usrbuf;
+
+    int r = 0;
  
     // check if buffer is still available
     if (bufinfo.buffer_offset < bufinfo.buffer_size){

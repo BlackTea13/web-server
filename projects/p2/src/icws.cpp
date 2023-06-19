@@ -102,16 +102,12 @@ int write_response_to_socket(int socketFd, Response response){
     return EXIT_SUCCESS;
 }
 
-/*
-    returns true for keep-alive
-    returns false for close
-*/
+
 void serve_http(int socketFd){
-    std::cout << "PROCESSING REQUEST" << "\n";
     BufferInfo buffer_info;
 
 
-    if(buffer_map.count(socketFd) <= 0){ // TRUE if socketFd is not in buffer_map
+    if(buffer_map.count(socketFd) <= 0){ 
         buffer_info = BufferInfo();
         buffer_map[socketFd] = buffer_info;
     }
@@ -125,8 +121,6 @@ void serve_http(int socketFd){
     // we need to time this while loop for bad requests that never end
     std::chrono::time_point start = std::chrono::steady_clock::now();
     while ((readBytes = read_line_swag(socketFd, buf, BUFSIZE, buffer_info, timeout * 1000)) > 0) {
-        std::cout << "DEBUG: READ BYTES: " << readBytes << "\n";
-        std::cout << "DEBUG: BUFFER: " << buf << "\n";
         line = std::string(buf);
         request_string += line;
         if(line == "\r\n"){
@@ -140,12 +134,13 @@ void serve_http(int socketFd){
     }
     // error
     if(readBytes == -1){
-        std::cout << "DEBUG: ERROR" << '\n';
+        std::cout << "DEBUG: ERROR 123" << '\n';
         Response response = bad_request_response();
         std::string response_string = response_to_string(response);
         std::cout << "DEBUG: RESPONSE STRING ON ERROR:"  << "\n" << response_string << "\n";
 
         write_all(socketFd, response_string.data(), get_response_size(response));
+        std::this_thread::sleep_for(std::chrono::seconds(1000));
         serve_http(socketFd);
     }
     // timeout
@@ -172,7 +167,7 @@ void serve_http(int socketFd){
     if(!result.success){
         response = error_response(result);
         std::string response_string = response_to_string(response);
-        std::cout << "DEBUG: RESPONSE STRING ON SUCCESS ON THREAD:" << socketFd << "\n" << response_string << "\n";
+        std::cout << "DEBUG: RESPONSE STRING ON SUCCESS ON THREAD:" << std::this_thread::get_id() << "\n" << response_string << "\n";
         write_all(socketFd, response_string.data(), get_response_size(response));
         serve_http(socketFd);
     }
@@ -195,9 +190,8 @@ void serve_http(int socketFd){
     std::string connection_value = get_connection_value(*request);
 
     std::string response_string = response_headers_to_string(response);
-    // std::cout << "DEBUG: RESPONSE STRING ON SUCCESS:"  << "\n" << response_string << "\n";
     write_response_to_socket(socketFd, response);
-    std::cout << "DEBUG: RESPONSE SENT ON SOCKETFD:" << socketFd << "\n";
+    std::cout << "DEBUG: RESPONSE STRING ON SUCCESS ON THREAD:" << std::this_thread::get_id() << "\n";
     
     if(connection_value == "close"){
         close(socketFd);
@@ -232,7 +226,6 @@ int start_server(){
             continue;
         }
 
-        int result;
         std::function f = [&](){
             serve_http(connFd);
         };

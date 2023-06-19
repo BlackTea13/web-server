@@ -188,14 +188,7 @@ Response create_error_response(int code, std::string reason, std::string connect
 }
 
 Response get_response(Request request, std::string root_dir){
-    std::string connection = "keep-alive";
-    if(header_name_in_request(&request, "Connection")){
-        for(int i = 0; i < request.header_count; i++){
-            if(strcmp(request.headers[i].header_name, "Connection") == 0){
-                connection = request.headers[i].header_value;
-            }
-        }
-    }
+    std::string connection = get_connection_value(request);
 
     std::string filepath = request.http_uri;
     if(filepath == ""){
@@ -205,7 +198,6 @@ Response get_response(Request request, std::string root_dir){
     std::string content_type = get_content_type(filepath);
 
     std::string full_filepath = root_dir + filepath;
-    std::cout << "filepath " << full_filepath << std::endl;
 
     std::string body = "";
     
@@ -248,14 +240,7 @@ Response get_response(Request request, std::string root_dir){
 }
 
 Response head_response(Request request, std::string root_dir){
-    std::string connection = "keep-alive";
-    if(header_name_in_request(&request, "Connection")){
-        for(int i = 0; i < request.header_count; i++){
-            if(strcmp(request.headers[i].header_name, "Connection") == 0){
-                connection = request.headers[i].header_value;
-            }
-        }
-    }
+    std::string connection = get_connection_value(request);
 
     std::string filepath = request.http_uri;
     if(filepath == ""){
@@ -265,7 +250,7 @@ Response head_response(Request request, std::string root_dir){
     std::string content_type = get_content_type(filepath);
 
     std::string full_filepath = root_dir + filepath;
-    
+
     // check if uri is '/' then we want to serve index.html
     if(filepath == "/"){
         full_filepath = root_dir + "/index.html";
