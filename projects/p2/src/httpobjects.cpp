@@ -209,8 +209,10 @@ Response get_response(Request request, std::string root_dir){
 
     std::string body = "";
     
-    std::filesystem::path cwd = std::filesystem::current_path() / full_filepath;
-    std::cout << "pwd:" << std::filesystem::current_path() << '\n';
+    // check if uri is '/' then we want to serve index.html
+    if(filepath == "/"){
+        full_filepath = root_dir + "/index.html";
+    }
 
     std::ifstream file(full_filepath, std::ios::binary);
     file.ignore(std::numeric_limits<std::streamsize>::max());
@@ -263,10 +265,11 @@ Response head_response(Request request, std::string root_dir){
     std::string content_type = get_content_type(filepath);
 
     std::string full_filepath = root_dir + filepath;
-    std::cout << "filepath " << full_filepath << std::endl;
-
-    std::string body = "";
-    std::cout << "pwd:" << std::filesystem::current_path() << '\n';
+    
+    // check if uri is '/' then we want to serve index.html
+    if(filepath == "/"){
+        full_filepath = root_dir + "/index.html";
+    }
 
     std::ifstream file(full_filepath, std::ios::binary);
     file.ignore(std::numeric_limits<std::streamsize>::max());
