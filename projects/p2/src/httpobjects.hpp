@@ -84,6 +84,7 @@ std::vector<std::string> request_headers_to_vec(Request request);
 bool header_name_in_request(Request* request, std::string header_name);
 int get_response_size(Response response);
 std::string datetime_rfc1123();
+std::string get_connection_value(Request request);
 
 Response timeout_response();
 Response bad_request_response();

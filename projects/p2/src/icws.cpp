@@ -8,39 +8,33 @@
 #include <poll.h>
 #include <unordered_map>
 #include <fcntl.h>
+#include <functional>
 #include "parse.h"
 #include "pcsa_net.hpp"
 #include "swag_net.hpp"
+#include "threadpool.hpp"
 #include "globals.hpp"
 
 
-static const std::unordered_map<std::string, std::string> mime_types = {
-    {".html", "text/html"},
-    {".css", "text/css"},
-    {".js", "application/javascript"},
-    {".jpg", "image/jpeg"},
-    {".jpeg", "image/jpeg"},
-    {".png", "image/png"},
-    {".gif", "image/gif"},
-    {".txt", "text/plain"},
-    {".pdf", "application/pdf"},
-    {".mp4", "video/mp4"},
-    {".mp3", "audio/mpeg"},
-    {".ico", "image/x-icon"}
-};
-
 // a map for storing the buffer info for each connection
 std::unordered_map<int, BufferInfo> buffer_map;
+
+// mutex for parse, it is not thread friendly :(
+std::mutex parse_mutex;
 
 const option long_opts[] =
 {
     {"root", required_argument, nullptr, 'r'},
     {"port", required_argument, nullptr, 'p'},
+    {"numThreads", optional_argument, nullptr, 'n'},
+    {"timeout", optional_argument, nullptr, 'h'},
     {nullptr, no_argument, nullptr, 0}
 };
 
 const char* root = nullptr;
 const char* port = nullptr;
+int numThreads = 4;
+int timeout = 100;
 
 int process_args(int argc, char* argv[]){
     int opt;
@@ -52,6 +46,12 @@ int process_args(int argc, char* argv[]){
                 break;
             case 'p':
                 port = optarg;
+                break;
+            case 'n':
+                numThreads = atoi(optarg);
+                break;
+            case 'h':
+                timeout = atoi(optarg);
                 break;
             default:
                 std::cerr << "Error: Invalid Option" << '\n';
@@ -102,8 +102,11 @@ int write_response_to_socket(int socketFd, Response response){
     return EXIT_SUCCESS;
 }
 
-
-int serve_http(int socketFd){
+/*
+    returns true for keep-alive
+    returns false for close
+*/
+void serve_http(int socketFd){
     std::cout << "PROCESSING REQUEST" << "\n";
     BufferInfo buffer_info;
 
@@ -121,7 +124,7 @@ int serve_http(int socketFd){
 
     // we need to time this while loop for bad requests that never end
     std::chrono::time_point start = std::chrono::steady_clock::now();
-    while ((readBytes = read_line_swag(socketFd, buf, BUFSIZE, buffer_info, 8000)) > 0) {
+    while ((readBytes = read_line_swag(socketFd, buf, BUFSIZE, buffer_info, timeout * 1000)) > 0) {
         std::cout << "DEBUG: READ BYTES: " << readBytes << "\n";
         std::cout << "DEBUG: BUFFER: " << buf << "\n";
         line = std::string(buf);
@@ -130,7 +133,7 @@ int serve_http(int socketFd){
             break;
         }
         // if the while loop doesn't end in 20 seconds, we assume that the request is bad
-        if(std::chrono::steady_clock::now() - start > std::chrono::seconds(20)){
+        if(std::chrono::steady_clock::now() - start > std::chrono::seconds(timeout)){
             readBytes = -2; // not sure if this is a good idea but whatever...
             break;
         } 
@@ -143,7 +146,7 @@ int serve_http(int socketFd){
         std::cout << "DEBUG: RESPONSE STRING ON ERROR:"  << "\n" << response_string << "\n";
 
         write_all(socketFd, response_string.data(), get_response_size(response));
-        return -1;
+        serve_http(socketFd);
     }
     // timeout
     if(readBytes == -2){
@@ -153,20 +156,25 @@ int serve_http(int socketFd){
         std::string response_string = response_to_string(response);
         std::cout << "DEBUG: RESPONSE STRING ON TIMEOUT:"  << "\n" << response_string << "\n";
         write_all(socketFd, response_string.data(), get_response_size(response));
-        return -2;
+        close(socketFd);
+        return;
     }
+    
 
 
     std::cout << "DEBUG: REQUEST STRING:\n" << request_string << "\n";
     Response response;
 
+    parse_mutex.lock();
     ParseResult result = parse(request_string.data(), request_string.size());
+    parse_mutex.unlock();
+
     if(!result.success){
         response = error_response(result);
         std::string response_string = response_to_string(response);
-        std::cout << "DEBUG: RESPONSE STRING ON SUCCESS:"  << "\n" << response_string << "\n";
+        std::cout << "DEBUG: RESPONSE STRING ON SUCCESS ON THREAD:" << socketFd << "\n" << response_string << "\n";
         write_all(socketFd, response_string.data(), get_response_size(response));
-        return EXIT_SUCCESS;
+        serve_http(socketFd);
     }
     
     // we can finally handle our good requests, unless its a 404 or unimplemented :(
@@ -184,16 +192,27 @@ int serve_http(int socketFd){
         response = unimplemented_response();
     }
 
+    std::string connection_value = get_connection_value(*request);
+
     std::string response_string = response_headers_to_string(response);
-    std::cout << "DEBUG: RESPONSE STRING ON SUCCESS:"  << "\n" << response_string << "\n";
+    // std::cout << "DEBUG: RESPONSE STRING ON SUCCESS:"  << "\n" << response_string << "\n";
     write_response_to_socket(socketFd, response);
-    std::cout << "DEBUG: RESPONSE SENT" << "\n";
-    return EXIT_SUCCESS;
+    std::cout << "DEBUG: RESPONSE SENT ON SOCKETFD:" << socketFd << "\n";
+    
+    if(connection_value == "close"){
+        close(socketFd);
+        return;
+    }
+    serve_http(socketFd);
 } 
 
 int start_server(){
     std::cout << "Starting server on port:" << port << " at root directory: " << root << '\n';
-    
+    ThreadPool pool;
+
+    pool.start(numThreads);
+
+
     int listenFd = open_listenfd(port);
     int connFd;
     while(1){
@@ -213,13 +232,18 @@ int start_server(){
             continue;
         }
 
-        // TODO: pass work to thread later
-        int res = serve_http(connFd);
-        close(connFd);
+        int result;
+        std::function f = [&](){
+            serve_http(connFd);
+        };
+
+        pool.add_job(f);
     }
     close(listenFd);
+    pool.stop();
     return EXIT_SUCCESS;
 }
+
 
 int main(int argc, char* argv[]){
     if(process_args(argc, argv) == EXIT_FAILURE){

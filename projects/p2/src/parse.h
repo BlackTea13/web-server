@@ -14,6 +14,7 @@ struct ParseResult {
 	std::string response_reason;
 };
 
+// i hate threads >:(
 ParseResult parse(char *buffer, int size);
 inline std::string get_reason(ResponseCode code);
 

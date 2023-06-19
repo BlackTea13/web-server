@@ -29,6 +29,16 @@ std::string get_content_type(std::string filepath){
     return content_type;
 }
 
+std::string get_connection_value(Request request){
+    std::string connection = "keep-alive";
+    for(int i = 0; i < request.header_count; i++){
+        if(strcmp(request.headers[i].header_name, "Connection") == 0){
+            connection = request.headers[i].header_value;
+        }
+    }
+    return connection;
+}
+
 
 std::string response_to_string(Response response){
     std::string response_string = "";
