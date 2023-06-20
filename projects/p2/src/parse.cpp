@@ -68,9 +68,9 @@ ParseResult parse(char *buffer, int size) {
 	}
 
     // Valid End State
-	Request *request = (Request *) malloc(sizeof(Request));
+	Request* request;
 	if (state == STATE_CRLFCRLF) {
-		request = (Request *) malloc(sizeof(Request));
+		request = (Request *) calloc(1, sizeof(Request));
         request->header_count=0;
         //TODO: You will need to handle resizing this in parser.y
         request->headers = (Request_header *) calloc(1, sizeof(Request_header));

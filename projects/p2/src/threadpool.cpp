@@ -13,20 +13,6 @@ void ThreadPool::start(int num_threads){
     }
     poison_pill = false;
 }
-       
-// void ThreadPool::loop(){
-//    while (true) {
-//         std::function<void()> job;
-//         int result;
-//         {   
-//             std::unique_lock<std::mutex> lock(mutex);
-//             condition.wait(lock, [this] { return !work_queue.empty() || poison_pill; });
-//             if(poison_pill) {return;}
-//             result = work_queue.dequeue(job);
-//         }
-//         job();
-//     }
-// }
 
 void ThreadPool::loop(){
    while (true) {
@@ -65,4 +51,5 @@ void ThreadPool::stop(){
     for(int i = 0; i < workers.size(); i++){
         workers.at(i).join();
     }
+    workers.clear();
 }

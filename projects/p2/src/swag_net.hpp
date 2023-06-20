@@ -12,4 +12,4 @@ struct BufferInfo{
 };
 
 
-int read_line_swag(int connFd, char *usrbuf, size_t maxlen, BufferInfo& bufinfo, float timeout);
+int read_line_swag(int connFd, char *usrbuf, size_t maxlen, BufferInfo& bufinfo, int timeout);

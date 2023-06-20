@@ -1,11 +1,11 @@
 #include "swag_net.hpp"
 #include <poll.h>
+#include <chrono>
 #include <iostream>
+#include <sys/socket.h>
 
-int read_line_swag(int connFd, char *usrbuf, size_t maxlen, BufferInfo& bufinfo, float timeout){
-    auto& [buffer, buffer_size, buffer_offset, isClosed] = bufinfo;
+int read_line_swag(int connFd, char *usrbuf, size_t maxlen, BufferInfo& bufinfo, int timeout){
     char c, *bufp = usrbuf;
-
     int r = 0;
  
     // check if buffer is still available
@@ -23,30 +23,32 @@ int read_line_swag(int connFd, char *usrbuf, size_t maxlen, BufferInfo& bufinfo,
     
     // check if buffer is exhausted
     else if (bufinfo.buffer_offset >= bufinfo.buffer_size){
-        int n;
-        memset(buffer, 0, READBUFCAPACITY);
+        int n = 0;
+        memset(bufinfo.buffer, 0, READBUFCAPACITY);
 
         // read from the socket
         struct pollfd pollfd;
         pollfd.fd = connFd;
         pollfd.events = POLLIN;
-        int pollRet = poll(&pollfd, 1, timeout);
-        if (pollRet == 0) return -2; // timeout
-        else if (pollRet < 0) return -1; // error
-        else {
-            // socket is ready
-            n = read(connFd, bufinfo.buffer, READBUFCAPACITY);
+
+        
+        std::chrono::time_point start = std::chrono::steady_clock::now();
+        while(n <= 0){
+            int pollRet = poll(&pollfd, 1, timeout * 1000);
+            if (pollRet == 0) return -2; // timeout
+            else if (pollRet < 0) return -1; // error
+            else {
+                n = recv(connFd, bufinfo.buffer, READBUFCAPACITY, 0);
+            }
+            std::cout<< n <<'\n';
+
+            if (n < 0) return -1; // error
+            if(std::chrono::steady_clock::now() - start > std::chrono::seconds(timeout)) return -2; // timeout
         }
-        if (n == 0){
-            return -1;
-        }
-        if (n < 0) return -1;
 
         bufinfo.buffer_size = n;
-        // reset the buffer offset
         bufinfo.buffer_offset = 0;
     }
-    
     // now we have a new buffer to read from, luckily we already wrote that code
     return read_line_swag(connFd, usrbuf, maxlen, bufinfo, timeout);
 }

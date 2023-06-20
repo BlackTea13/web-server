@@ -1,5 +1,6 @@
 #pragma once
 #include "httpobjects.hpp"
+#include <memory>
 
 #define SUCCESS 0
 

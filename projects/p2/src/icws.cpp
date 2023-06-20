@@ -1,6 +1,7 @@
 #include <iostream>
 #include <unistd.h>
 #include <getopt.h>
+#include <algorithm>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -16,9 +17,6 @@
 #include "globals.hpp"
 
 
-// a map for storing the buffer info for each connection
-std::unordered_map<int, BufferInfo> buffer_map;
-
 // mutex for parse, it is not thread friendly :(
 std::mutex parse_mutex;
 
@@ -26,15 +24,15 @@ const option long_opts[] =
 {
     {"root", required_argument, nullptr, 'r'},
     {"port", required_argument, nullptr, 'p'},
-    {"numThreads", optional_argument, nullptr, 'n'},
-    {"timeout", optional_argument, nullptr, 'h'},
+    {"numThreads", required_argument, nullptr, 'n'},
+    {"timeout", required_argument, nullptr, 'h'},
     {nullptr, no_argument, nullptr, 0}
 };
 
 const char* root = nullptr;
 const char* port = nullptr;
-int numThreads = 4;
-int timeout = 100;
+int numThreads = 8;
+int timeout = 20;
 
 int process_args(int argc, char* argv[]){
     int opt;
@@ -48,10 +46,10 @@ int process_args(int argc, char* argv[]){
                 port = optarg;
                 break;
             case 'n':
-                numThreads = atoi(optarg);
+                numThreads = std::stoi(optarg);
                 break;
             case 'h':
-                timeout = atoi(optarg);
+                timeout = std::stoi(optarg);
                 break;
             default:
                 std::cerr << "Error: Invalid Option" << '\n';
@@ -66,26 +64,9 @@ int process_args(int argc, char* argv[]){
     return EXIT_SUCCESS;
 }
 
-Response error_response(ParseResult result){
-        int response_code = result.response_code;
-        std::string response_reason = result.response_reason;
-        Request* request = result.request;
-        std::string date = datetime_rfc1123();
-        std::string last_modified = date;
-        
-        // we take the connection parameter from the response
-        // if it does not exist, we assume to keep the connection alive
-        bool keep_alive = true;
-        if(header_name_in_request(request, "Connection")){
-            keep_alive = strcmp(request->headers[0].header_value, "close") != 0;
-        }
-        
-        return create_error_response(response_code, response_reason, keep_alive ? "keep-alive" : "close");
-}
-
 int write_response_to_socket(int socketFd, Response response){
-    // send headers first
     std::string response_string = response_to_string(response);
+    //std::cout << "response: \n" << response_string << '\n';
     char* response_ptr = response_string.data();
     size_t totalBytes = response_string.size();
     size_t bytesWritten = 0;
@@ -104,99 +85,99 @@ int write_response_to_socket(int socketFd, Response response){
 
 
 void serve_http(int socketFd){
-    BufferInfo buffer_info;
-
+    // a map for storing the buffer info for each connection
+    std::unordered_map<int, std::unique_ptr<BufferInfo>> buffer_map;
 
     if(buffer_map.count(socketFd) <= 0){ 
-        buffer_info = BufferInfo();
-        buffer_map[socketFd] = buffer_info;
+        buffer_map[socketFd] = std::make_unique<BufferInfo>();
     }
-    buffer_info = buffer_map[socketFd];
+    std::unique_ptr<BufferInfo>& buffer_info = buffer_map[socketFd];
 
-    char buf[BUFSIZE];
-    int readBytes;
-    std::string line;
-    std::string request_string = "";
+    bool keep_alive = true;
+    while(keep_alive){
+        /*
+        * We read from the socket until we get a \r\n\r\n,
+        * we time the while loop and if it takes longer than the timeout
+        * we respond with a timeout error, 
+        * 
+        * Secretly, we know there is another timeout check in read_line_swag ;)
+        */
+        int readBytes;
+        std::string request_string;
+        char buf[BUFSIZE];
+        std::chrono::time_point start = std::chrono::steady_clock::now();
+        while((readBytes = read_line_swag(socketFd, buf, BUFSIZE, *buffer_info, timeout)) >= 0){
+            request_string += buf;
+            if(request_string.find("\r\n\r\n") != std::string::npos){
+                break;
+            }
+            if(std::chrono::steady_clock::now() - start > std::chrono::seconds(timeout)){
+                readBytes = -2; // timeout condition
+                break;
+            } 
+        }
 
-    // we need to time this while loop for bad requests that never end
-    std::chrono::time_point start = std::chrono::steady_clock::now();
-    while ((readBytes = read_line_swag(socketFd, buf, BUFSIZE, buffer_info, timeout * 1000)) > 0) {
-        line = std::string(buf);
-        request_string += line;
-        if(line == "\r\n"){
+        /*
+        * Handle Timeout
+        */
+        if(readBytes == -2){
+            write_response_to_socket(socketFd, create_timeout_response());
+            keep_alive = false;
             break;
         }
-        // if the while loop doesn't end in 20 seconds, we assume that the request is bad
-        if(std::chrono::steady_clock::now() - start > std::chrono::seconds(timeout)){
-            readBytes = -2; // not sure if this is a good idea but whatever...
-            break;
-        } 
-    }
-    // error
-    if(readBytes == -1){
-        std::cout << "DEBUG: ERROR 123" << '\n';
-        Response response = bad_request_response();
-        std::string response_string = response_to_string(response);
-        std::cout << "DEBUG: RESPONSE STRING ON ERROR:"  << "\n" << response_string << "\n";
+        /*
+        * Error occured, we'll just respond with a bad request
+        * we assume to keep the connection alive
+        */
+        else if(readBytes < 0){
+            write_response_to_socket(socketFd, create_bad_request_response(std::string("keep-alive")));
+            continue;
+        }
 
-        write_all(socketFd, response_string.data(), get_response_size(response));
-        serve_http(socketFd);
-    }
-    // timeout
-    if(readBytes == -2){
-        std::cout << "DEBUG: REQUEST TIMEOUT" << '\n';
-        Response response = timeout_response();
+        /*
+        * We can now parse the request and handle errors from there
+        */
+        ParseResult parse_result = parse(request_string.data(), request_string.size());
+        bool parse_sucess = parse_result.success;
+        /*
+        * Parser did not like the request, so bad!
+        * since the request is not in the correct format,
+        * we assume to keep the connection alive
+        */
+        if(!parse_sucess){
+            write_response_to_socket(socketFd, create_bad_request_response(std::string("keep-alive")));
+            continue;
+        }
 
-        std::string response_string = response_to_string(response);
-        std::cout << "DEBUG: RESPONSE STRING ON TIMEOUT:"  << "\n" << response_string << "\n";
-        write_all(socketFd, response_string.data(), get_response_size(response));
-        close(socketFd);
-        return;
-    }
-    
+        /*
+         * Parser likes our request if we get here!
+        */
+       std::unique_ptr<Request> request;
+       request.reset(parse_result.request);
 
+       std::string connection_value = get_connection_value(*request);
+       if(connection_value == "close"){
+           keep_alive = false;
+       }
 
-    std::cout << "DEBUG: REQUEST STRING:\n" << request_string << "\n";
-    Response response;
-
-    parse_mutex.lock();
-    ParseResult result = parse(request_string.data(), request_string.size());
-    parse_mutex.unlock();
-
-    if(!result.success){
-        response = error_response(result);
-        std::string response_string = response_to_string(response);
-        std::cout << "DEBUG: RESPONSE STRING ON SUCCESS ON THREAD:" << std::this_thread::get_id() << "\n" << response_string << "\n";
-        write_all(socketFd, response_string.data(), get_response_size(response));
-        serve_http(socketFd);
+        /*
+         * We can now handle the request
+        */
+        std::string request_method = request->http_method;
+        if(request_method == "GET"){
+            write_response_to_socket(socketFd, create_get_response(*request, root));
+        }
+        else if(request_method == "HEAD"){
+            write_response_to_socket(socketFd, create_head_response(*request, root));
+        }
+        /*
+         * We don't support this method, respond with unimplemented method
+        */
+        else{
+            write_response_to_socket(socketFd, create_not_implemented_response(connection_value));
+        }
     }
-    
-    // we can finally handle our good requests, unless its a 404 or unimplemented :(
-    // 404 is handled in the GET and HEAD functions
-    Request* request = result.request;
-    std::string method = request->http_method;
-    if(method == "GET"){
-        response = get_response(*request, root);
-    }
-    else if(method == "HEAD"){
-        response = head_response(*request, root);
-        response.response_body = "";
-    }
-    else{
-        response = unimplemented_response();
-    }
-
-    std::string connection_value = get_connection_value(*request);
-
-    std::string response_string = response_headers_to_string(response);
-    write_response_to_socket(socketFd, response);
-    std::cout << "DEBUG: RESPONSE STRING ON SUCCESS ON THREAD:" << std::this_thread::get_id() << "\n";
-    
-    if(connection_value == "close"){
-        close(socketFd);
-        return;
-    }
-    serve_http(socketFd);
+    close(socketFd);
 } 
 
 int start_server(){
