@@ -40,7 +40,6 @@ int read_line_swag(int connFd, char *usrbuf, size_t maxlen, BufferInfo& bufinfo,
             else {
                 n = recv(connFd, bufinfo.buffer, READBUFCAPACITY, 0);
             }
-            std::cout<< n <<'\n';
 
             if (n < 0) return -1; // error
             if(std::chrono::steady_clock::now() - start > std::chrono::seconds(timeout)) return -2; // timeout
