@@ -96,7 +96,10 @@ void write_all(int connFd, char *buf, size_t len) {
 
     while (toWrite > 0) {
         ssize_t numWritten = write(connFd, buf, toWrite);
-        if (numWritten < 0) { fprintf(stderr, "Meh, can't write\n"); return ;}
+        if (numWritten < 0) { 
+            fprintf(stderr, "Meh, can't write\n");
+            return;
+        }
         toWrite -= numWritten;
         buf += numWritten;
     }

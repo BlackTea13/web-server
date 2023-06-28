@@ -31,14 +31,13 @@ int read_line_swag(int connFd, char *usrbuf, size_t maxlen, BufferInfo& bufinfo,
         pollfd.fd = connFd;
         pollfd.events = POLLIN;
 
-        
         std::chrono::time_point start = std::chrono::steady_clock::now();
         while(n <= 0){
             int pollRet = poll(&pollfd, 1, timeout * 1000);
             if (pollRet == 0) return -2; // timeout
             else if (pollRet < 0) return -1; // error
             else {
-                n = recv(connFd, bufinfo.buffer, READBUFCAPACITY, 0);
+                n = read(connFd, bufinfo.buffer, READBUFCAPACITY);
             }
 
             if (n < 0) return -1; // error

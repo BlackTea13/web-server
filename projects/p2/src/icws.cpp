@@ -90,6 +90,7 @@ void serve_http(int socketFd){
 
     if(buffer_map.count(socketFd) <= 0){ 
         buffer_map[socketFd] = std::make_unique<BufferInfo>();
+        memset(buffer_map[socketFd]->buffer, 0, READBUFCAPACITY + 1);
     }
     std::unique_ptr<BufferInfo>& buffer_info = buffer_map[socketFd];
 
@@ -111,6 +112,7 @@ void serve_http(int socketFd){
             if(request_string.find("\r\n\r\n") != std::string::npos){
                 break;
             }
+
             if(std::chrono::steady_clock::now() - start > std::chrono::seconds(timeout)){
                 readBytes = -2; // timeout condition
                 break;
@@ -137,33 +139,62 @@ void serve_http(int socketFd){
         /*
         * We can now parse the request and handle errors from there
         */
+        parse_mutex.lock();
         ParseResult parse_result = parse(request_string.data(), request_string.size());
-        bool parse_sucess = parse_result.success;
+        parse_mutex.unlock();
+
+        bool parse_success = parse_result.success;
+
+        /*
+        * Check if the connection is still alive, we don't
+        * want to write to a closed socket
+        */
+        struct pollfd pfd;
+        pfd.fd = socketFd;
+        pfd.events = POLLIN;
+        int pollStatus = poll(&pfd, 1, 0);
+
+        if (pollStatus) {
+            free(parse_result.request->headers);
+            free(parse_result.request);
+            keep_alive = false;
+            break;
+        }
+
+
         /*
         * Parser did not like the request, so bad!
         * since the request is not in the correct format,
         * we assume to keep the connection alive
         */
-        if(!parse_sucess){
-            write_response_to_socket(socketFd, create_bad_request_response(std::string("keep-alive")));
+        if(!parse_success){
+            if (parse_result.response_reason == "Bad Request"){
+                write_response_to_socket(socketFd, create_bad_request_response(std::string("keep-alive")));
+            }
+            else if (parse_result.response_reason == "HTTP Version Not Supported"){
+                write_response_to_socket(socketFd, create_html_version_not_supported_response(std::string("keep-alive")));
+            }
+            else{
+                write_response_to_socket(socketFd, create_bad_request_response(std::string("keep-alive")));
+            }
             continue;
         }
 
         /*
-         * Parser likes our request if we get here!
+        * Parser likes our request if we get here!
         */
-       std::unique_ptr<Request> request;
-       request.reset(parse_result.request);
+        Request* request = parse_result.request;
 
-       std::string connection_value = get_connection_value(*request);
-       if(connection_value == "close"){
+        std::string connection_value = get_connection_value(*request);
+        if(connection_value == "close"){
            keep_alive = false;
-       }
+        }
 
         /*
          * We can now handle the request
         */
         std::string request_method = request->http_method;
+        //std::cout << "writing to socket: " << socketFd << " on thread: " << std::this_thread::get_id() << '\n';
         if(request_method == "GET"){
             write_response_to_socket(socketFd, create_get_response(*request, root));
         }
@@ -173,11 +204,13 @@ void serve_http(int socketFd){
         /*
          * We don't support this method, respond with unimplemented method
         */
-        else{
+        else {
             write_response_to_socket(socketFd, create_not_implemented_response(connection_value));
         }
-    }
-    close(socketFd);
+        free(request->headers);
+        free(request);
+    }   
+    //std::cout << "closing connection on thread" << std::this_thread::get_id() << "\n";
 } 
 
 int start_server(){
@@ -185,7 +218,6 @@ int start_server(){
     ThreadPool pool;
 
     pool.start(numThreads);
-
 
     int listenFd = open_listenfd(port);
     int connFd;
@@ -199,15 +231,16 @@ int start_server(){
         if (getnameinfo((sockaddr *) &clientAddr, clientLen, hostBuf, BUFSIZE, svcBuf, BUFSIZE, 0) == 0) 
             std::cout << "Connection from " << hostBuf << ":" << svcBuf << "\n";
         else 
-            std::cout << "Connection from ?unknown?" << "\n";
+           //std::cout << "Connection from ?unknown?" << "\n";
 
         if(connFd < 0){
             std::cerr << "Error: accept failed" << '\n';
             continue;
         }
 
-        std::function f = [&](){
+        std::function f = [=](){
             serve_http(connFd);
+            close(connFd);
         };
 
         pool.add_job(f);

@@ -3,6 +3,7 @@
 #include <sstream>
 #include <vector>
 #include <unordered_map>
+#include <iostream>
 
 //Enum ResponseCodes
 enum class ResponseCode {
@@ -29,6 +30,8 @@ class Request {
 		char http_uri[4096];
 		Request_header *headers;
 		int header_count;
+	
+
 };
 
 /**
@@ -95,3 +98,4 @@ Response create_timeout_response();
 Response create_not_found_response(std::string connection);
 Response create_bad_request_response( std::string connection_value);
 Response create_not_implemented_response(std::string connection_value);
+Response create_html_version_not_supported_response(std::string connection_value);

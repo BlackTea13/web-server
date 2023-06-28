@@ -44,7 +44,7 @@ Response create_bad_request_response(std::string connection_value){
 Response create_not_implemented_response(std::string connection_value){
     Response response;
     response.response_code = 501;
-    response.response_reason = "Bad Request";
+    response.response_reason = "Not Implemented";
     response.response_body = "<html><h1>501 Not Implemented</h1></html>";
 
     response.headers = {
@@ -57,6 +57,24 @@ Response create_not_implemented_response(std::string connection_value){
 
     return response;
 }
+
+Response create_html_version_not_supported_response(std::string connection_value){
+    Response response;
+    response.response_code = 505;
+    response.response_reason = "HTTP Version Not Supported";
+    response.response_body = "<html><h1>505 HTTP Version Not Supported</h1></html>";
+
+    response.headers = {
+        {"Content-Type", "text/html"},
+        {"Content-Length", std::to_string(response.response_body.size())},
+        {"Connection", connection_value},
+        {"Server", SERVER_VALUE},
+        {"Date", datetime_rfc1123()},
+    };
+
+    return response;
+}
+
 
 Response create_not_found_response(std::string connection){
     Response response;

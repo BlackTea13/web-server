@@ -9,9 +9,9 @@ BIN := icws
 # C compiler
 CC  := g++
 # C PreProcessor Flag
-CPPFLAGS :=-std=c++23
+CPPFLAGS :=-std=c++23 -O3
 # compiler flags
-CFLAGS   := -g -Wall
+CFLAGS   := -g -Wall -O3
 # DEPS = parse.h y.tab.h
 
 default: all
