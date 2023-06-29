@@ -85,7 +85,7 @@ Response create_http_version_not_supported_response(std::string connection_value
     return response;
 }
 
-Response create_internal_server_error_response(std::string connection_value){
+std::string create_internal_server_error_response(std::string connection_value){
     Response response;
     response.response_code = 500;
     response.response_reason = "Internal Server Error";
@@ -99,7 +99,7 @@ Response create_internal_server_error_response(std::string connection_value){
         {"Date", datetime_rfc1123()},
     };
 
-    return response;
+    return response_to_string(response);
 }
 
 
@@ -471,6 +471,7 @@ std::string create_cgi_post_response(Request request, std::string port, std::str
         std::cout << "Error code: " << result.error_code << std::endl;
         std::cout << "Error message: " << result.reason << std::endl;
         std::cout << "Error message: " << result.http_reason << std::endl;
+        return create_internal_server_error_response();
     }
 }
 
