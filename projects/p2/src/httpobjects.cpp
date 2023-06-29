@@ -58,7 +58,7 @@ Response create_not_implemented_response(std::string connection_value){
     return response;
 }
 
-Response create_html_version_not_supported_response(std::string connection_value){
+Response create_http_version_not_supported_response(std::string connection_value){
     Response response;
     response.response_code = 505;
     response.response_reason = "HTTP Version Not Supported";
@@ -136,17 +136,6 @@ std::string response_to_string(Response response){
     return response_string;
 }
 
-std::string response_headers_to_string(Response response){
-    std::string response_string = "";
-    response_string += "HTTP/1.1 " + std::to_string(response.response_code) + " " + response.response_reason + "\r\n";
-    for (auto header : response.headers){
-        response_string += header.header_name + ": " + header.header_value + "\r\n";
-    }
-    response_string += "\r\n";
-    return response_string;
-}
-
-
 std::string datetime_rfc1123(){
     auto now = std::chrono::system_clock::now();
     std::time_t currentTime = std::chrono::system_clock::to_time_t(now);
@@ -167,6 +156,16 @@ bool header_name_in_request(Request request, std::string header_name){
     return false;
 }
 
+std::string get_header_value(Request request, std::string header_name){
+    Request_header* headers = request.headers;
+    for(int i = 0; i < request.header_count; i++){
+        if(strcmp(headers[i].header_name, header_name.c_str()) == 0){
+            return std::string(headers[i].header_value);
+        }
+    }
+    return "";
+}
+
 std::vector<Response_header> create_response_header_vec(
     std::string date,
     std::string last_modified,
@@ -183,7 +182,6 @@ std::vector<Response_header> create_response_header_vec(
     headers.push_back(Response_header("Last-Modified", last_modified));
     return headers;
 }
-
 
 Response create_get_response(Request request, std::string root_dir){
     std::string connection = get_connection_value(request);
@@ -280,4 +278,16 @@ Response create_head_response(Request request, std::string root_dir){
         connection
     );
     return response;
+}
+
+Response create_cgi_get_response(Request request, std::string root_dir){
+
+}
+
+Response create_cgi_post_response(Request request, std::string root_dir){
+    return Response();
+}
+
+Response create_cgi_head_response(Request request, std::string root_dir){
+
 }

@@ -17,5 +17,8 @@ int main(){
     char buf[5000];
     memset(buf, 0, 5000);
 
+    std::string s = "hello world";
+    int wow = std::stoi(s);
+    
     return 0;
 }

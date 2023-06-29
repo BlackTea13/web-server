@@ -14,6 +14,7 @@
 #include "pcsa_net.hpp"
 #include "swag_net.hpp"
 #include "threadpool.hpp"
+#include "cgi.hpp"
 #include "globals.hpp"
 
 
@@ -26,11 +27,13 @@ const option long_opts[] =
     {"port", required_argument, nullptr, 'p'},
     {"numThreads", required_argument, nullptr, 'n'},
     {"timeout", required_argument, nullptr, 'h'},
+    {"cgiHandlers", required_argument, nullptr, 'c'},
     {nullptr, no_argument, nullptr, 0}
 };
 
 const char* root = nullptr;
 const char* port = nullptr;
+const char* cgi_program = nullptr;
 int numThreads = 8;
 int timeout = 20;
 
@@ -66,7 +69,6 @@ int process_args(int argc, char* argv[]){
 
 int write_response_to_socket(int socketFd, Response response){
     std::string response_string = response_to_string(response);
-    //std::cout << "response: \n" << response_string << '\n';
     char* response_ptr = response_string.data();
     size_t totalBytes = response_string.size();
     size_t bytesWritten = 0;
@@ -75,12 +77,107 @@ int write_response_to_socket(int socketFd, Response response){
         size_t bytesRemaining = totalBytes - bytesWritten;
         size_t bytesToWrite = (bytesRemaining < BUFSIZE) ? bytesRemaining : BUFSIZE;
 
-        write_all(socketFd, (response_ptr + bytesWritten), bytesToWrite);
+        struct pollfd pfd;
+        pfd.fd = socketFd;
+        pfd.events = POLLIN;
+        int pollStatus = poll(&pfd, 1, 0);
 
+        if (pollStatus) {
+            return -1;
+        }
+        write_all(socketFd, (response_ptr + bytesWritten), bytesToWrite);
         bytesWritten += bytesToWrite;
     }
 
     return EXIT_SUCCESS;
+}
+
+std::string read_body_from_buffer(int socketFd, int content_length, BufferInfo& buffer_info){
+    int bytes_read = 0;
+    char buf[BUFSIZE]; 
+    memset(buf, 0, BUFSIZE);
+    std::string body = "";
+    std::chrono::time_point start = std::chrono::steady_clock::now();
+    while(bytes_read < content_length){
+        int bytes_to_read = std::min(BUFSIZE, content_length - bytes_read);
+        int bytes_read_now = read_line_swag(socketFd, buf, bytes_to_read, buffer_info, timeout);
+        if(bytes_read_now < 0){
+            return "";
+        }
+        body += std::string(buf, bytes_read_now);
+        bytes_read += bytes_read_now;
+
+        if(std::chrono::steady_clock::now() - start > std::chrono::seconds(timeout)){
+            return "timeout error";
+        } 
+    }
+    return body;
+}
+
+void handle_cgi_request(int socketFd, Request* request, BufferInfo& buffer_info){
+    if (strcmp(request->http_method, "GET") == 0){
+        Response response = create_cgi_get_response(*request, std::string(root));
+        write_response_to_socket(socketFd, response);
+        return;
+        
+    }
+    else if (strcmp(request->http_method, "HEAD") == 0){
+        Response response = create_cgi_head_response(*request, std::string(root));
+        write_response_to_socket(socketFd, response);
+        return;
+    }
+    else if (strcmp(request->http_method, "POST") == 0){
+        /*
+        * We have to read the buffer for the body of the request,
+        * first check if the content-length header is nice, then
+        * we can read and process
+        */
+        if(header_name_in_request(*request, "Content-Length")){
+            int content_length;
+            /*
+             * If the content-length header is not a number, we should
+             * return a bad request response 
+            */
+            try{
+                content_length = std::stoi(get_header_value(*request, "Content-Length"));
+            }
+            catch(...){
+                write_response_to_socket(socketFd, create_bad_request_response("close"));
+                return;
+            }
+
+            /*
+             * Read body from buffer and handle errors 
+            */
+            std::string body = read_body_from_buffer(socketFd, content_length, buffer_info);
+            if(body == ""){
+                write_response_to_socket(socketFd, create_bad_request_response("close"));
+                return;
+            }
+            else if(body == "timeout error"){
+                write_response_to_socket(socketFd, create_timeout_response());
+                return;
+            }
+            else{
+                request->body = body;
+            }
+
+            /*
+             *  Now we can process the request 
+            */  
+            Response response = create_cgi_post_response(*request, std::string(root));
+            write_response_to_socket(socketFd, response);
+            return;
+        }
+        else {
+            write_response_to_socket(socketFd, create_bad_request_response("close"));
+            return;
+        }
+    }
+    else {
+        write_response_to_socket(socketFd, create_not_implemented_response("close"));
+        return;
+    }
 }
 
 
@@ -172,7 +269,7 @@ void serve_http(int socketFd){
                 write_response_to_socket(socketFd, create_bad_request_response(std::string("keep-alive")));
             }
             else if (parse_result.response_reason == "HTTP Version Not Supported"){
-                write_response_to_socket(socketFd, create_html_version_not_supported_response(std::string("keep-alive")));
+                write_response_to_socket(socketFd, create_http_version_not_supported_response(std::string("keep-alive")));
             }
             else{
                 write_response_to_socket(socketFd, create_bad_request_response(std::string("keep-alive")));
@@ -191,8 +288,17 @@ void serve_http(int socketFd){
         }
 
         /*
-         * We can now handle the request
+         * We can now handle the request, check if its a cgi request
         */
+        std::string request_uri = request->http_uri;
+        if(request_uri.find("/cgi/") != std::string::npos){
+            handle_cgi_request(socketFd, request, *buffer_info);
+            free(request->headers);
+            free(request);
+            keep_alive = false;
+            break;
+        }
+
         std::string request_method = request->http_method;
         //std::cout << "writing to socket: " << socketFd << " on thread: " << std::this_thread::get_id() << '\n';
         if(request_method == "GET"){
@@ -210,7 +316,6 @@ void serve_http(int socketFd){
         free(request->headers);
         free(request);
     }   
-    //std::cout << "closing connection on thread" << std::this_thread::get_id() << "\n";
 } 
 
 int start_server(){
@@ -256,6 +361,7 @@ int main(int argc, char* argv[]){
         return EXIT_FAILURE;
     };
 
+    
     start_server();
     return 0;
 }

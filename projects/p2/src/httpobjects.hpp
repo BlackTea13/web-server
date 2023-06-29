@@ -30,7 +30,7 @@ class Request {
 		char http_uri[4096];
 		Request_header *headers;
 		int header_count;
-	
+		std::string body;
 
 };
 
@@ -81,21 +81,22 @@ static std::unordered_map<int, std::string> connection_header = {
 
 
 // HTTP Response functions
-std::string response_headers_to_string(Response response);
 std::string response_to_string(Response response);
-std::vector<std::string> request_headers_to_vec(Request request);
 bool header_name_in_request(Request request, std::string header_name);
+std::string get_header_value(Request request, std::string header_name);
+
 std::string datetime_rfc1123();
 std::string get_connection_value(Request request);
 
-
 Response create_get_response(Request request, std::string root_dir);
 Response create_head_response(Request request, std::string root_dir);
-
-Response create_good_response(std::string connection, std::string body, std::string content_type);
 
 Response create_timeout_response();
 Response create_not_found_response(std::string connection);
 Response create_bad_request_response( std::string connection_value);
 Response create_not_implemented_response(std::string connection_value);
-Response create_html_version_not_supported_response(std::string connection_value);
+Response create_http_version_not_supported_response(std::string connection_value);
+
+Response create_cgi_get_response(Request request, std::string root_dir);
+Response create_cgi_head_response(Request request, std::string root_dir);
+Response create_cgi_post_response(Request request, std::string root_dir);

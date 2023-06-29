@@ -94,6 +94,7 @@ int open_clientfd(const char *hostname, const char *port) {
 void write_all(int connFd, char *buf, size_t len) {
     size_t toWrite = len;
 
+    
     while (toWrite > 0) {
         ssize_t numWritten = write(connFd, buf, toWrite);
         if (numWritten < 0) { 
