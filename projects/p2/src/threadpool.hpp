@@ -81,7 +81,7 @@ class WorkQueue {
 
 class ThreadPool {
     public:
-        void start(int num_threads);
+        void start(size_t num_threads);
         void stop();
         void add_job(std::function<void()> job);
         bool busy();

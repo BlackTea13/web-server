@@ -3,6 +3,7 @@
 #include <sstream>
 #include <vector>
 #include <unordered_map>
+#include <map>
 #include <iostream>
 
 //Enum ResponseCodes
@@ -97,6 +98,34 @@ Response create_bad_request_response( std::string connection_value);
 Response create_not_implemented_response(std::string connection_value);
 Response create_http_version_not_supported_response(std::string connection_value);
 
-Response create_cgi_get_response(Request request, std::string root_dir);
-Response create_cgi_head_response(Request request, std::string root_dir);
-Response create_cgi_post_response(Request request, std::string root_dir);
+Response create_cgi_get_response(Request request, std::string cgi_path);
+Response create_cgi_head_response(Request request, std::string cgi_path);
+std::string create_cgi_post_response(Request request, std::string port, std::string cgi_path, std::string remote_addr);
+
+/*
+    We only consider the following headers:
+    - CONTENT_LENGTH
+    - CONTENT_TYPE
+    - HTTP_ACCEPT
+    - HTTP_REFERER
+    - HTTP_ACCEPT_ENCODING
+    - HTTP_ACCEPT_LANGUAGE
+    - HTTP_ACCEPT_CHARSET
+    - HTTP_COOKIE
+    - HTTP_USER_AGENT
+    - HTTP_CONNECTION
+*/
+
+struct cgi_result {
+    int error_code;
+    std::string reason;
+    std::string http_reason;
+	std::string response;
+};
+
+std::map<std::string, std::string> get_cgi_env_variables(Request request,
+                                                        std::string server_port,
+                                                        std::string script_name,
+                                                        std::string remote_addr);
+void set_default_cgi_env_variables();
+cgi_result pipe_cgi_process(std::string cgi_path, std::string body, std::map<std::string, std::string> env_variables);

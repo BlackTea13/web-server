@@ -3,12 +3,12 @@
 #include "threadpool.hpp"
 
 
-void ThreadPool::start(int num_threads){
+void ThreadPool::start(size_t num_threads){
     if (num_threads > std::thread::hardware_concurrency()){
         num_threads = std::thread::hardware_concurrency();
     }
     workers.resize(num_threads);
-    for(int i = 0; i < num_threads; i++){
+    for(size_t i = 0; i < num_threads; i++){
         workers.at(i) = std::thread(&ThreadPool::loop, this);
     }
     poison_pill = false;
@@ -17,8 +17,6 @@ void ThreadPool::start(int num_threads){
 void ThreadPool::loop(){
    while (true) {
         std::function<void()> job;
-        bool gotJob = false;
-        int result;
         {   
             std::unique_lock<std::mutex> lock(mutex);
             condition.wait(lock, [this] { return !work_queue.empty() || poison_pill; });
@@ -48,7 +46,7 @@ void ThreadPool::stop(){
         poison_pill = true;
     }
     condition.notify_all();
-    for(int i = 0; i < workers.size(); i++){
+    for(size_t i = 0; i < workers.size(); i++){
         workers.at(i).join();
     }
     workers.clear();

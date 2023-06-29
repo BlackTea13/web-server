@@ -88,8 +88,6 @@ ParseResult parse(char *buffer, int size) {
 	if (state != STATE_CRLFCRLF){
 		// Request does not have the correct syntax
 		std::cerr << "DEBUG: Request does not have the correct syntax" << "\n";
-		free(request->headers);
-		free(request);
 		return ParseResult({false, NULL, 400, get_reason(ResponseCode::BAD_REQUEST)});
 	}
 

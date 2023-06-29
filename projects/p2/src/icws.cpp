@@ -27,7 +27,7 @@ const option long_opts[] =
     {"port", required_argument, nullptr, 'p'},
     {"numThreads", required_argument, nullptr, 'n'},
     {"timeout", required_argument, nullptr, 'h'},
-    {"cgiHandlers", required_argument, nullptr, 'c'},
+    {"cgiHandler", required_argument, nullptr, 'c'},
     {nullptr, no_argument, nullptr, 0}
 };
 
@@ -53,6 +53,9 @@ int process_args(int argc, char* argv[]){
                 break;
             case 'h':
                 timeout = std::stoi(optarg);
+                break;
+            case 'c':
+                cgi_program = optarg;
                 break;
             default:
                 std::cerr << "Error: Invalid Option" << '\n';
@@ -114,32 +117,32 @@ std::string read_body_from_buffer(int socketFd, int content_length, BufferInfo& 
     return body;
 }
 
-void handle_cgi_request(int socketFd, Request* request, BufferInfo& buffer_info){
-    if (strcmp(request->http_method, "GET") == 0){
-        Response response = create_cgi_get_response(*request, std::string(root));
+void handle_cgi_request(int socketFd, Request request, BufferInfo& buffer_info, std::string host){
+    if (strcmp(request.http_method, "GET") == 0){
+        Response response = create_cgi_get_response(request, cgi_program);
         write_response_to_socket(socketFd, response);
         return;
         
     }
-    else if (strcmp(request->http_method, "HEAD") == 0){
-        Response response = create_cgi_head_response(*request, std::string(root));
+    else if (strcmp(request.http_method, "HEAD") == 0){
+        Response response = create_cgi_head_response(request, cgi_program);
         write_response_to_socket(socketFd, response);
         return;
     }
-    else if (strcmp(request->http_method, "POST") == 0){
+    else if (strcmp(request.http_method, "POST") == 0){
         /*
         * We have to read the buffer for the body of the request,
         * first check if the content-length header is nice, then
         * we can read and process
         */
-        if(header_name_in_request(*request, "Content-Length")){
-            int content_length;
+        if(header_name_in_request(request, "Content-Length")){
+            int content_length = 0;
             /*
              * If the content-length header is not a number, we should
              * return a bad request response 
             */
             try{
-                content_length = std::stoi(get_header_value(*request, "Content-Length"));
+                content_length = std::stoi(get_header_value(request, "Content-Length"));
             }
             catch(...){
                 write_response_to_socket(socketFd, create_bad_request_response("close"));
@@ -150,7 +153,7 @@ void handle_cgi_request(int socketFd, Request* request, BufferInfo& buffer_info)
              * Read body from buffer and handle errors 
             */
             std::string body = read_body_from_buffer(socketFd, content_length, buffer_info);
-            if(body == ""){
+            if(body == "" && content_length != 0){
                 write_response_to_socket(socketFd, create_bad_request_response("close"));
                 return;
             }
@@ -158,15 +161,16 @@ void handle_cgi_request(int socketFd, Request* request, BufferInfo& buffer_info)
                 write_response_to_socket(socketFd, create_timeout_response());
                 return;
             }
-            else{
-                request->body = body;
+            else{ 
+                request.body = body;
             }
 
             /*
              *  Now we can process the request 
             */  
-            Response response = create_cgi_post_response(*request, std::string(root));
-            write_response_to_socket(socketFd, response);
+            std::string response = create_cgi_post_response(request, port, cgi_program, host);
+            std::cout << "RESPOSNE \n" << response << '\n';
+            write_all(socketFd, response.data(), response.size());
             return;
         }
         else {
@@ -181,7 +185,7 @@ void handle_cgi_request(int socketFd, Request* request, BufferInfo& buffer_info)
 }
 
 
-void serve_http(int socketFd){
+void serve_http(int socketFd, std::string host){
     // a map for storing the buffer info for each connection
     std::unordered_map<int, std::unique_ptr<BufferInfo>> buffer_map;
 
@@ -292,7 +296,7 @@ void serve_http(int socketFd){
         */
         std::string request_uri = request->http_uri;
         if(request_uri.find("/cgi/") != std::string::npos){
-            handle_cgi_request(socketFd, request, *buffer_info);
+            handle_cgi_request(socketFd, *request, *buffer_info, host);
             free(request->headers);
             free(request);
             keep_alive = false;
@@ -333,6 +337,7 @@ int start_server(){
         // block until connection with client
         connFd = accept(listenFd, NULL, NULL);
         char hostBuf[BUFSIZE], svcBuf[BUFSIZE];
+        memset(hostBuf, 0, BUFSIZE);
         if (getnameinfo((sockaddr *) &clientAddr, clientLen, hostBuf, BUFSIZE, svcBuf, BUFSIZE, 0) == 0) 
             std::cout << "Connection from " << hostBuf << ":" << svcBuf << "\n";
         else 
@@ -342,9 +347,10 @@ int start_server(){
             std::cerr << "Error: accept failed" << '\n';
             continue;
         }
-
+        
+        std::string host = hostBuf;
         std::function f = [=](){
-            serve_http(connFd);
+            serve_http(connFd, host);
             close(connFd);
         };
 
@@ -361,7 +367,7 @@ int main(int argc, char* argv[]){
         return EXIT_FAILURE;
     };
 
-    
+    set_default_cgi_env_variables();
     start_server();
     return 0;
 }

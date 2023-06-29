@@ -5,7 +5,17 @@
 #include <sys/mman.h>
 #include <filesystem>
 #include <limits>
+
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
 #include "httpobjects.hpp"
+
+#define overwrite 1
 
 Response create_timeout_response(){
     Response response;
@@ -63,6 +73,23 @@ Response create_http_version_not_supported_response(std::string connection_value
     response.response_code = 505;
     response.response_reason = "HTTP Version Not Supported";
     response.response_body = "<html><h1>505 HTTP Version Not Supported</h1></html>";
+
+    response.headers = {
+        {"Content-Type", "text/html"},
+        {"Content-Length", std::to_string(response.response_body.size())},
+        {"Connection", connection_value},
+        {"Server", SERVER_VALUE},
+        {"Date", datetime_rfc1123()},
+    };
+
+    return response;
+}
+
+Response create_internal_server_error_response(std::string connection_value){
+    Response response;
+    response.response_code = 500;
+    response.response_reason = "Internal Server Error";
+    response.response_body = "<html><h1>500 Internal Server Error</h1></html>";
 
     response.headers = {
         {"Content-Type", "text/html"},
@@ -280,14 +307,173 @@ Response create_head_response(Request request, std::string root_dir){
     return response;
 }
 
-Response create_cgi_get_response(Request request, std::string root_dir){
+std::vector<std::string> cgi_headers = {
+    "HTTP_ACCEPT",
+    "HTTP_ACCEPT_ENCODING",
+    "HTTP_ACCEPT_LANGUAGE",
+    "HTTP_ACCEPT_CHARSET",
+    "HTTP_COOKIE",
+    "HTTP_USER_AGENT",
+    "HTTP_CONNECTION",
+    "CONTENT_LENGTH",
+    "CONTENT_TYPE",
+    "HTTP_REFERER",
+};
 
+// a map of the env variables above to their corresponding request headers
+std::map<std::string, std::string> cgi_env_variables = {
+    {"HTTP_ACCEPT", "Accept"},
+    {"HTTP_ACCEPT_ENCODING", "Accept-Encoding"},
+    {"HTTP_ACCEPT_LANGUAGE", "Accept-Language"},
+    {"HTTP_ACCEPT_CHARSET", "Accept-Charset"},
+    {"HTTP_COOKIE", "Cookie"},
+    {"HTTP_USER_AGENT", "User-Agent"},
+    {"HTTP_CONNECTION", "Connection"},
+    {"CONTENT_LENGTH", "Content-Length"},
+    {"CONTENT_TYPE", "Content-Type"},
+    {"HTTP_REFERER", "Referer"},
+};
+
+std::map<std::string, std::string> get_cgi_env_variables(Request request,
+                                                        std::string server_port,
+                                                        std::string script_name,
+                                                        std::string remote_addr){
+
+    std::map<std::string, std::string> env_vars = {};
+    for(std::string header : cgi_headers){
+        if(header_name_in_request(request, header)){
+            std::string header_value = get_header_value(request, header);
+            env_vars[cgi_env_variables[header]] = header_value;
+        }
+    }
+    std::string uri = request.http_uri;
+    std::string args = uri.substr(uri.find('?') + 1);
+    env_vars["QUERY_STRING"] = args;
+    env_vars["SERVER_PORT"] = server_port;
+    env_vars["SCRIPT_NAME"] = script_name;
+    env_vars["REMOTE_ADDR"] = remote_addr;
+
+    return env_vars;
 }
 
-Response create_cgi_post_response(Request request, std::string root_dir){
+void set_default_cgi_env_variables(){
+    setenv("GATEWAY_INTERFACE", "CGI/1.1", overwrite);
+    setenv("SERVER_PROTOCOL", "HTTP/1.1", overwrite);
+    setenv("SERVER_SOFTWARE", SERVER_VALUE, overwrite);
+}
+
+cgi_result pipe_cgi_process(std::string cgi_path, std::string body, std::map<std::string, std::string> env_variables){
+    int c2pFds[2]; /* Child to parent pipe */
+    int p2cFds[2]; /* Parent to child pipe */
+    std::string response = "";
+    if (pipe(c2pFds) < 0){
+        return cgi_result({500, "c2p pip failed.","Internal Server Error"});
+    } 
+    if (pipe(p2cFds) < 0){
+        return cgi_result({500, "p2c pip failed.","Internal Server Error"});
+    }
+
+    cgi_result result;
+    int pid = fork();
+
+    if (pid < 0) return cgi_result({500, "fork failed.","Internal Server Error"});
+    if (pid == 0) { /* Child - set up the conduit & run inferior cmd */
+
+        /* Wire pipe's incoming to child's stdin */
+        /* First, close the unused direction. */
+        if (close(p2cFds[1]) < 0) return cgi_result({500, "failed to close p2c[1]","Internal Server Error"});
+        if (p2cFds[0] != STDIN_FILENO) {
+            if (dup2(p2cFds[0], STDIN_FILENO) < 0)
+                return cgi_result({500, "dup2 stdin failed.","Internal Server Error"});
+            if (close(p2cFds[0]) < 0)
+                return cgi_result({500, "close p2c[0] failed.","Internal Server Error"});
+        }
+
+        /* Wire child's stdout to pipe's outgoing */
+        /* But first, close the unused direction */
+        if (close(c2pFds[0]) < 0) return cgi_result({500, "failed to close c2p[0]","Internal Server Error"});
+        if (c2pFds[1] != STDOUT_FILENO) {
+            if (dup2(c2pFds[1], STDOUT_FILENO) < 0)
+                return cgi_result({500, "dup2 stdin failed.","Internal Server Error"});
+            if (close(c2pFds[1]) < 0)
+                return cgi_result({500, "close pipeFd[0] failed.","Internal Server Error"});
+        }
+
+        /* Set environment variables */
+        for(auto& [key, value] : env_variables){
+            setenv(key.c_str(), value.c_str(), overwrite);
+        }
+
+        char* inferiorArgv[] = {"./cgi-demo/hello.py", NULL};
+        if (execvpe(inferiorArgv[0], inferiorArgv, environ) < 0)
+            return cgi_result({500, "exec failed.","Internal Server Error"});
+    }
+    else { /* Parent - send a random message */
+        /* Close the write direction in parent's incoming */
+        if (close(c2pFds[1]) < 0) return cgi_result({500, "failed to close c2p[1]","Internal Server Error"});
+
+        /* Close the read direction in parent's outgoing */
+        if (close(p2cFds[0]) < 0) return cgi_result({500,"failed to close p2c[0]","Internal Server Error"});
+
+        if(body != ""){
+            char *message = body.data();
+            /* Write a message to the child - replace with write_all as necessary */
+            write(p2cFds[1], message, strlen(message));
+        }
+        /* Close this end, done writing. */
+        if (close(p2cFds[1]) < 0) return cgi_result({500,"close p2c[01] failed.","Internal Server Error"});
+
+        char buf[BUFSIZE+1];
+        ssize_t numRead;
+        /* Begin reading from the child */
+
+        while ((numRead = read(c2pFds[0], buf, BUFSIZE)) > 0) {
+            printf("Parent saw %ld bytes from child...\n", numRead);
+            buf[numRead] = '\0'; /* Printing hack; won't work with binary data */
+            printf("-------\n");
+            printf("%s", buf);
+            printf("-------\n");
+            response += buf;
+        }
+
+        /* Close this end, done reading. */
+        if (close(c2pFds[0]) < 0) return cgi_result({500,"close c2p[01] failed.","Internal Server Error"});
+        /* Wait for child termination & reap */
+        int status;
+
+        if (waitpid(pid, &status, 0) < 0) return cgi_result({500,"waitpid failed.","Internal Server Error"});
+        printf("Child exited... parent's terminating as well.\n");
+    }
+    return cgi_result({200, "OK","OK", response});
+}
+
+
+Response create_cgi_get_response(Request request, std::string cgi_path){
     return Response();
 }
 
-Response create_cgi_head_response(Request request, std::string root_dir){
+std::string create_cgi_post_response(Request request, std::string port, std::string cgi_path, std::string remote_addr){
+    #include "cgi.hpp"
+    /*
+    * Get path and message to send off to CGI program
+    */
+    std::string uri = request.http_uri;
+    std::string message = request.body;
+    std::map<std::string, std::string> env_variables = get_cgi_env_variables(request, port, cgi_path, remote_addr);
+    
+    cgi_result result = pipe_cgi_process(cgi_path, message, env_variables);
+    if(result.error_code == 200){
+        std::cout <<"CGI program ran successfully" << std::endl;
+        return result.response;
+    }
+    else{
+        std::cout << "CGI program failed to run" << std::endl;
+        std::cout << "Error code: " << result.error_code << std::endl;
+        std::cout << "Error message: " << result.reason << std::endl;
+        std::cout << "Error message: " << result.http_reason << std::endl;
+    }
+}
 
+Response create_cgi_head_response(Request request, std::string cgi_path){
+    return Response();
 }
