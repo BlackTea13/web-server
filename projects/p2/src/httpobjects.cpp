@@ -471,7 +471,7 @@ std::string create_cgi_post_response(Request request, std::string port, std::str
         std::cout << "Error code: " << result.error_code << std::endl;
         std::cout << "Error message: " << result.reason << std::endl;
         std::cout << "Error message: " << result.http_reason << std::endl;
-        return create_internal_server_error_response();
+        return create_internal_server_error_response("close");
     }
 }
 
