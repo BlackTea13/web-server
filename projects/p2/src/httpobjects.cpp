@@ -173,6 +173,17 @@ std::string datetime_rfc1123(){
     return std::string(buffer);
 }
 
+std::string last_modified_rfc1123(int fileDescript) {
+    struct stat file_info;
+    auto gmtm = gmtime(&file_info.st_mtime);
+    char buffer[RFC1123_TIME_LEN + 1];
+
+    strftime(buffer, sizeof(buffer), RFC1123_TIME_FMT, gmtm);
+    return std::string(buffer);
+
+
+}
+
 bool header_name_in_request(Request request, std::string header_name){
     Request_header* headers = request.headers;
     for(int i = 0; i < request.header_count; i++){
@@ -247,6 +258,10 @@ Response create_get_response(Request request, std::string root_dir){
         return create_not_found_response(connection);
     }
 
+    auto filefd = open(full_filepath.data(), O_RDONLY);
+    if(filefd < 0){
+        return create_not_found_response(connection);
+    }
 
     // now we can create our response
     Response response;
@@ -255,11 +270,12 @@ Response create_get_response(Request request, std::string root_dir){
     response.response_body = body;
     response.headers = create_response_header_vec(
         datetime_rfc1123(),
-        datetime_rfc1123(),
+        last_modified_rfc1123(filefd),
         content_type,
         std::to_string(length),
         connection
     );
+    close(filefd);
     return response;
 }
 
@@ -292,6 +308,11 @@ Response create_head_response(Request request, std::string root_dir){
         return create_not_found_response(connection);
     }
 
+    auto filefd = open(full_filepath.data(), O_RDONLY);
+    if(filefd < 0){
+        return create_not_found_response(connection);
+    }
+
     // now we can create our response
     Response response;
     response.response_code = 200;
@@ -299,7 +320,7 @@ Response create_head_response(Request request, std::string root_dir){
     response.response_body = "";
     response.headers = create_response_header_vec(
         datetime_rfc1123(),
-        datetime_rfc1123(),
+        last_modified_rfc1123(filefd),
         content_type,
         std::to_string(length),
         connection
@@ -448,12 +469,7 @@ cgi_result pipe_cgi_process(std::string cgi_path, std::string body, std::map<std
 }
 
 
-Response create_cgi_get_response(Request request, std::string cgi_path){
-    return Response();
-}
-
-std::string create_cgi_post_response(Request request, std::string port, std::string cgi_path, std::string remote_addr){
-    #include "cgi.hpp"
+std::string create_cgi_get_response(Request request, std::string port, std::string cgi_path, std::string remote_addr){
     /*
     * Get path and message to send off to CGI program
     */
@@ -470,11 +486,46 @@ std::string create_cgi_post_response(Request request, std::string port, std::str
         std::cout << "CGI program failed to run" << std::endl;
         std::cout << "Error code: " << result.error_code << std::endl;
         std::cout << "Error message: " << result.reason << std::endl;
-        std::cout << "Error message: " << result.http_reason << std::endl;
         return create_internal_server_error_response("close");
     }
 }
 
-Response create_cgi_head_response(Request request, std::string cgi_path){
-    return Response();
+std::string create_cgi_head_response(Request request, std::string port, std::string cgi_path, std::string remote_addr){
+    std::string uri = request.http_uri;
+    std::string message = request.body;
+    std::map<std::string, std::string> env_variables = get_cgi_env_variables(request, port, cgi_path, remote_addr);
+    
+    cgi_result result = pipe_cgi_process(cgi_path, message, env_variables);
+    if(result.error_code == 200){
+        std::cout <<"CGI program ran successfully" << std::endl;
+        return result.response.substr(0, result.response.find("\r\n\r\n") + 4);
+    }
+    else{
+        std::cout << "CGI program failed to run" << std::endl;
+        std::cout << "Error code: " << result.error_code << std::endl;
+        std::cout << "Error message: " << result.reason << std::endl;
+        return create_internal_server_error_response("close");
+    }
 }
+
+std::string create_cgi_post_response(Request request, std::string port, std::string cgi_path, std::string remote_addr){
+    /*
+    * Get path and message to send off to CGI program
+    */
+    std::string uri = request.http_uri;
+    std::string message = request.body;
+    std::map<std::string, std::string> env_variables = get_cgi_env_variables(request, port, cgi_path, remote_addr);
+    
+    cgi_result result = pipe_cgi_process(cgi_path, message, env_variables);
+    if(result.error_code == 200){
+        std::cout <<"CGI program ran successfully" << std::endl;
+        return result.response;
+    }
+    else{
+        std::cout << "CGI program failed to run" << std::endl;
+        std::cout << "Error code: " << result.error_code << std::endl;
+        std::cout << "Error message: " << result.reason << std::endl;
+        return create_internal_server_error_response("close");
+    }
+}
+

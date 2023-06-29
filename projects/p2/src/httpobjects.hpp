@@ -98,8 +98,8 @@ Response create_bad_request_response( std::string connection_value);
 Response create_not_implemented_response(std::string connection_value);
 Response create_http_version_not_supported_response(std::string connection_value);
 
-Response create_cgi_get_response(Request request, std::string cgi_path);
-Response create_cgi_head_response(Request request, std::string cgi_path);
+std::string create_cgi_head_response(Request request, std::string port, std::string cgi_path, std::string remote_addr);
+std::string create_cgi_get_response(Request request, std::string port, std::string cgi_path, std::string remote_addr);
 std::string create_cgi_post_response(Request request, std::string port, std::string cgi_path, std::string remote_addr);
 
 /*

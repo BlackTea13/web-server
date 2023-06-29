@@ -14,7 +14,6 @@
 #include "pcsa_net.hpp"
 #include "swag_net.hpp"
 #include "threadpool.hpp"
-#include "cgi.hpp"
 #include "globals.hpp"
 
 
@@ -119,14 +118,14 @@ std::string read_body_from_buffer(int socketFd, int content_length, BufferInfo& 
 
 void handle_cgi_request(int socketFd, Request request, BufferInfo& buffer_info, std::string host){
     if (strcmp(request.http_method, "GET") == 0){
-        Response response = create_cgi_get_response(request, cgi_program);
-        write_response_to_socket(socketFd, response);
+        std::string response = create_cgi_get_response(request, port, cgi_program, host);
+        write_all(socketFd, response.data(), response.size());
         return;
         
     }
     else if (strcmp(request.http_method, "HEAD") == 0){
-        Response response = create_cgi_head_response(request, cgi_program);
-        write_response_to_socket(socketFd, response);
+        std::string response = create_cgi_head_response(request, port, cgi_program, host);
+        write_all(socketFd, response.data(), response.size());
         return;
     }
     else if (strcmp(request.http_method, "POST") == 0){
@@ -169,7 +168,6 @@ void handle_cgi_request(int socketFd, Request request, BufferInfo& buffer_info, 
              *  Now we can process the request 
             */  
             std::string response = create_cgi_post_response(request, port, cgi_program, host);
-            std::cout << "RESPOSNE \n" << response << '\n';
             write_all(socketFd, response.data(), response.size());
             return;
         }
