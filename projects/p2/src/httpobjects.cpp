@@ -284,7 +284,9 @@ Response create_head_response(Request request, std::string root_dir){
 
     std::string filepath = request.http_uri;
     if(filepath == ""){
-        return create_not_found_response(connection);
+        Response response = create_not_found_response(connection);
+        response.response_body = "";
+        return response;
     }
 
     std::string content_type = get_content_type(filepath);
@@ -305,12 +307,16 @@ Response create_head_response(Request request, std::string root_dir){
     if(file.is_open()){
         file.close();
     } else {
-        return create_not_found_response(connection);
+        Response response = create_not_found_response(connection);
+        response.response_body = "";
+        return response;
     }
 
     auto filefd = open(full_filepath.data(), O_RDONLY);
     if(filefd < 0){
-        return create_not_found_response(connection);
+        Response response = create_not_found_response(connection);
+        response.response_body = "";
+        return response;
     }
 
     // now we can create our response
@@ -449,11 +455,7 @@ cgi_result pipe_cgi_process(std::string cgi_path, std::string body, std::map<std
         /* Begin reading from the child */
 
         while ((numRead = read(c2pFds[0], buf, BUFSIZE)) > 0) {
-            printf("Parent saw %ld bytes from child...\n", numRead);
             buf[numRead] = '\0'; /* Printing hack; won't work with binary data */
-            printf("-------\n");
-            printf("%s", buf);
-            printf("-------\n");
             response += buf;
         }
 
@@ -463,7 +465,8 @@ cgi_result pipe_cgi_process(std::string cgi_path, std::string body, std::map<std
         int status;
 
         if (waitpid(pid, &status, 0) < 0) return cgi_result({500,"waitpid failed.","Internal Server Error"});
-        printf("Child exited... parent's terminating as well.\n");
+
+        // printf("Child exited... parent's terminating as well.\n");
     }
     return cgi_result({200, "OK","OK", response});
 }
@@ -479,13 +482,9 @@ std::string create_cgi_get_response(Request request, std::string port, std::stri
     
     cgi_result result = pipe_cgi_process(cgi_path, message, env_variables);
     if(result.error_code == 200){
-        std::cout <<"CGI program ran successfully" << std::endl;
         return result.response;
     }
     else{
-        std::cout << "CGI program failed to run" << std::endl;
-        std::cout << "Error code: " << result.error_code << std::endl;
-        std::cout << "Error message: " << result.reason << std::endl;
         return create_internal_server_error_response("close");
     }
 }
@@ -497,13 +496,9 @@ std::string create_cgi_head_response(Request request, std::string port, std::str
     
     cgi_result result = pipe_cgi_process(cgi_path, message, env_variables);
     if(result.error_code == 200){
-        std::cout <<"CGI program ran successfully" << std::endl;
         return result.response.substr(0, result.response.find("\r\n\r\n") + 4);
     }
     else{
-        std::cout << "CGI program failed to run" << std::endl;
-        std::cout << "Error code: " << result.error_code << std::endl;
-        std::cout << "Error message: " << result.reason << std::endl;
         return create_internal_server_error_response("close");
     }
 }
@@ -518,13 +513,9 @@ std::string create_cgi_post_response(Request request, std::string port, std::str
     
     cgi_result result = pipe_cgi_process(cgi_path, message, env_variables);
     if(result.error_code == 200){
-        std::cout <<"CGI program ran successfully" << std::endl;
         return result.response;
     }
     else{
-        std::cout << "CGI program failed to run" << std::endl;
-        std::cout << "Error code: " << result.error_code << std::endl;
-        std::cout << "Error message: " << result.reason << std::endl;
         return create_internal_server_error_response("close");
     }
 }

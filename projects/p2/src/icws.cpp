@@ -69,6 +69,7 @@ int process_args(int argc, char* argv[]){
     return EXIT_SUCCESS;
 }
 
+
 int write_response_to_socket(int socketFd, Response response){
     std::string response_string = response_to_string(response);
     char* response_ptr = response_string.data();
@@ -260,7 +261,6 @@ void serve_http(int socketFd, std::string host){
             break;
         }
 
-
         /*
         * Parser did not like the request, so bad!
         * since the request is not in the correct format,
@@ -282,18 +282,58 @@ void serve_http(int socketFd, std::string host){
         /*
         * Parser likes our request if we get here!
         */
+        bool method_is_head = false;
         Request* request = parse_result.request;
+        std::cout << "Request: " << request->http_method << " " << request->http_uri << " " << request->http_version << std::endl;
+        if(strcmp("HEAD", request->http_method) == 0){
+            method_is_head = true;
+        }
 
         std::string connection_value = get_connection_value(*request);
         if(connection_value == "close"){
            keep_alive = false;
         }
+        std::cout << "here\n";
+        int content_length;
+        std::string content_length_str;
+        if(header_name_in_request(*request, "Content-Length")){
+            content_length_str = get_header_value(*request, "Content-Length");
+        }
+        std::cout << "crack\n";
+        try {
+            std::cout << content_length_str << '\n';
+            content_length = std::stoi(content_length_str);
+            std::string cool =  read_body_from_buffer(socketFd, content_length, *buffer_info);
+            std::cout << "cool:" << cool << '\n';
+            request->body = cool;
+        }
+        catch(const std::exception& e) {
+            write_response_to_socket(socketFd, create_bad_request_response(connection_value));
+            free(request->headers);
+            free(request);
+            break;
+        }
+        std::cout << "end\n";
+        
 
         /*
          * We can now handle the request, check if its a cgi request
         */
         std::string request_uri = request->http_uri;
         if(request_uri.find("/cgi/") != std::string::npos){
+
+            if(cgi_program == nullptr){
+                Response response = create_not_found_response(connection_value);
+                if(method_is_head){
+                    response.response_body = "";
+                }
+                write_response_to_socket(socketFd, response);
+                keep_alive = false;
+                free(request->headers);
+                free(request);
+                return;
+            }
+
             handle_cgi_request(socketFd, *request, *buffer_info, host);
             free(request->headers);
             free(request);
@@ -302,7 +342,6 @@ void serve_http(int socketFd, std::string host){
         }
 
         std::string request_method = request->http_method;
-        //std::cout << "writing to socket: " << socketFd << " on thread: " << std::this_thread::get_id() << '\n';
         if(request_method == "GET"){
             write_response_to_socket(socketFd, create_get_response(*request, root));
         }
@@ -313,6 +352,12 @@ void serve_http(int socketFd, std::string host){
          * We don't support this method, respond with unimplemented method
         */
         else {
+            if(method_is_head){
+                Response response = create_not_implemented_response(connection_value);
+                response.response_body = "";
+                write_response_to_socket(socketFd, response);
+                break;
+            }
             write_response_to_socket(socketFd, create_not_implemented_response(connection_value));
         }
         free(request->headers);
@@ -321,7 +366,12 @@ void serve_http(int socketFd, std::string host){
 } 
 
 int start_server(){
-    std::cout << "Starting server on port:" << port << " at root directory: " << root << '\n';
+    std::cout << "Starting server...\n";
+    std::cout << "Root directory: " << root << "\n";
+    std::cout << "Port: " << port << "\n";
+    std::cout << "Timeout: " << timeout << "\n";
+    std::cout << "Number of threads: " << numThreads << "\n";
+
     ThreadPool pool;
 
     pool.start(numThreads);
