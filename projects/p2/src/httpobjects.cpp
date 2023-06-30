@@ -425,7 +425,7 @@ cgi_result pipe_cgi_process(std::string cgi_path, std::string body, std::map<std
             setenv(key.c_str(), value.c_str(), overwrite);
         }
 
-        char* inferiorArgv[] = {"./cgi-demo/hello.py", NULL};
+        char* inferiorArgv[] = {cgi_path.data(), NULL};
         if (execvpe(inferiorArgv[0], inferiorArgv, environ) < 0)
             return cgi_result({500, "exec failed.","Internal Server Error"});
     }
