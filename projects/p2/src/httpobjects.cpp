@@ -477,10 +477,9 @@ std::string create_cgi_get_response(Request request, std::string port, std::stri
     * Get path and message to send off to CGI program
     */
     std::string uri = request.http_uri;
-    std::string message = request.body;
     std::map<std::string, std::string> env_variables = get_cgi_env_variables(request, port, cgi_path, remote_addr);
     
-    cgi_result result = pipe_cgi_process(cgi_path, message, env_variables);
+    cgi_result result = pipe_cgi_process(cgi_path, "", env_variables);
     if(result.error_code == 200){
         return result.response;
     }
@@ -494,7 +493,7 @@ std::string create_cgi_head_response(Request request, std::string port, std::str
     std::string message = request.body;
     std::map<std::string, std::string> env_variables = get_cgi_env_variables(request, port, cgi_path, remote_addr);
     
-    cgi_result result = pipe_cgi_process(cgi_path, message, env_variables);
+    cgi_result result = pipe_cgi_process(cgi_path, "", env_variables);
     if(result.error_code == 200){
         return result.response.substr(0, result.response.find("\r\n\r\n") + 4);
     }

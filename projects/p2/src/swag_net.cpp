@@ -46,6 +46,5 @@ int read_line_swag(int connFd, char *usrbuf, size_t maxlen, BufferInfo& bufinfo,
         bufinfo.buffer_size = n;
         bufinfo.buffer_offset = 0;
     }
-    // now we have a new buffer to read from, luckily we already wrote that code
     return read_line_swag(connFd, usrbuf, maxlen, bufinfo, timeout);
 }

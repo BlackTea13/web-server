@@ -190,7 +190,7 @@ void serve_http(int socketFd, std::string host){
 
     if(buffer_map.count(socketFd) <= 0){ 
         buffer_map[socketFd] = std::make_unique<BufferInfo>();
-        memset(buffer_map[socketFd]->buffer, 0, READBUFCAPACITY + 1);
+        memset(buffer_map[socketFd]->buffer, '\0', READBUFCAPACITY + 1);
     }
     std::unique_ptr<BufferInfo>& buffer_info = buffer_map[socketFd];
 
@@ -212,12 +212,13 @@ void serve_http(int socketFd, std::string host){
             if(request_string.find("\r\n\r\n") != std::string::npos){
                 break;
             }
-
+            std::cout << readBytes << '\n';
             if(std::chrono::steady_clock::now() - start > std::chrono::seconds(timeout)){
                 readBytes = -2; // timeout condition
                 break;
             } 
         }
+        std::cout << "readBytes: " << readBytes << '\n';
 
         /*
         * Handle Timeout
@@ -244,7 +245,7 @@ void serve_http(int socketFd, std::string host){
         parse_mutex.unlock();
 
         bool parse_success = parse_result.success;
-
+        std::cout << "request: " << request_string << '\n';
         /*
         * Check if the connection is still alive, we don't
         * want to write to a closed socket
@@ -284,7 +285,12 @@ void serve_http(int socketFd, std::string host){
         */
         bool method_is_head = false;
         Request* request = parse_result.request;
-        std::cout << "Request: " << request->http_method << " " << request->http_uri << " " << request->http_version << std::endl;
+
+        std::cout << "request->http_method: " << request->http_method << '\n';
+        std::cout << "request->http_version: " << request->http_version << '\n';
+        std::cout << "request->path: " << request->http_uri << '\n';
+
+
         if(strcmp("HEAD", request->http_method) == 0){
             method_is_head = true;
         }
@@ -293,27 +299,24 @@ void serve_http(int socketFd, std::string host){
         if(connection_value == "close"){
            keep_alive = false;
         }
-        std::cout << "here\n";
-        int content_length;
-        std::string content_length_str;
+
+
         if(header_name_in_request(*request, "Content-Length")){
-            content_length_str = get_header_value(*request, "Content-Length");
+            int content_length;
+            std::string content_length_str = get_header_value(*request, "Content-Length");
+            try {
+                content_length = std::stoi(content_length_str);
+                std::string cool =  read_body_from_buffer(socketFd, content_length, *buffer_info);
+                request->body = cool;
+            }
+            catch(const std::exception& e) {
+                write_response_to_socket(socketFd, create_bad_request_response(connection_value));
+                free(request->headers);
+                free(request);
+                break;
+            }
         }
-        std::cout << "crack\n";
-        try {
-            std::cout << content_length_str << '\n';
-            content_length = std::stoi(content_length_str);
-            std::string cool =  read_body_from_buffer(socketFd, content_length, *buffer_info);
-            std::cout << "cool:" << cool << '\n';
-            request->body = cool;
-        }
-        catch(const std::exception& e) {
-            write_response_to_socket(socketFd, create_bad_request_response(connection_value));
-            free(request->headers);
-            free(request);
-            break;
-        }
-        std::cout << "end\n";
+
         
 
         /*
