@@ -150,22 +150,6 @@ void handle_cgi_request(int socketFd, Request request, BufferInfo& buffer_info, 
             }
 
             /*
-             * Read body from buffer and handle errors 
-            */
-            std::string body = read_body_from_buffer(socketFd, content_length, buffer_info);
-            if(body == "" && content_length != 0){
-                write_response_to_socket(socketFd, create_bad_request_response("close"));
-                return;
-            }
-            else if(body == "timeout error"){
-                write_response_to_socket(socketFd, create_timeout_response());
-                return;
-            }
-            else{ 
-                request.body = body;
-            }
-
-            /*
              *  Now we can process the request 
             */  
             std::string response = create_cgi_post_response(request, port, cgi_program, host);
@@ -212,13 +196,11 @@ void serve_http(int socketFd, std::string host){
             if(request_string.find("\r\n\r\n") != std::string::npos){
                 break;
             }
-            std::cout << readBytes << '\n';
             if(std::chrono::steady_clock::now() - start > std::chrono::seconds(timeout)){
                 readBytes = -2; // timeout condition
                 break;
             } 
         }
-        std::cout << "readBytes: " << readBytes << '\n';
 
         /*
         * Handle Timeout
@@ -245,7 +227,6 @@ void serve_http(int socketFd, std::string host){
         parse_mutex.unlock();
 
         bool parse_success = parse_result.success;
-        std::cout << "request: " << request_string << '\n';
         /*
         * Check if the connection is still alive, we don't
         * want to write to a closed socket
@@ -286,10 +267,6 @@ void serve_http(int socketFd, std::string host){
         bool method_is_head = false;
         Request* request = parse_result.request;
 
-        std::cout << "request->http_method: " << request->http_method << '\n';
-        std::cout << "request->http_version: " << request->http_version << '\n';
-        std::cout << "request->path: " << request->http_uri << '\n';
-
 
         if(strcmp("HEAD", request->http_method) == 0){
             method_is_head = true;
@@ -300,20 +277,23 @@ void serve_http(int socketFd, std::string host){
            keep_alive = false;
         }
 
-
         if(header_name_in_request(*request, "Content-Length")){
-            int content_length;
+            int content_length = 0;
             std::string content_length_str = get_header_value(*request, "Content-Length");
             try {
                 content_length = std::stoi(content_length_str);
-                std::string cool =  read_body_from_buffer(socketFd, content_length, *buffer_info);
-                request->body = cool;
             }
             catch(const std::exception& e) {
                 write_response_to_socket(socketFd, create_bad_request_response(connection_value));
+                keep_alive = false;
                 free(request->headers);
                 free(request);
                 break;
+            }
+
+            if(content_length > 0){
+                std::string cool =  read_body_from_buffer(socketFd, content_length, *buffer_info);
+                request->body = cool;
             }
         }
 
@@ -389,10 +369,7 @@ int start_server(){
         connFd = accept(listenFd, NULL, NULL);
         char hostBuf[BUFSIZE], svcBuf[BUFSIZE];
         memset(hostBuf, 0, BUFSIZE);
-        if (getnameinfo((sockaddr *) &clientAddr, clientLen, hostBuf, BUFSIZE, svcBuf, BUFSIZE, 0) == 0) 
-            std::cout << "Connection from " << hostBuf << ":" << svcBuf << "\n";
-        else 
-           //std::cout << "Connection from ?unknown?" << "\n";
+        getnameinfo((sockaddr *) &clientAddr, clientLen, hostBuf, BUFSIZE, svcBuf, BUFSIZE, 0);
 
         if(connFd < 0){
             std::cerr << "Error: accept failed" << '\n';

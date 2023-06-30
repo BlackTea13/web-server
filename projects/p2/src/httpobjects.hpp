@@ -31,7 +31,7 @@ class Request {
 		char http_uri[4096];
 		Request_header *headers;
 		int header_count;
-		std::string body;
+		std::string body = "";
 
 };
 
